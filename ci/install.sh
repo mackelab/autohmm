@@ -30,7 +30,7 @@ conda update --yes conda
 # Configure the conda environment and put it in the path using the
 # provided versions
 conda create -n testenv --yes python=$PYTHON_VERSION pip nose \
-    scikit-learn cython
+    scikit-learn cython theano statsmodels
 source activate testenv
 
 # Run pip for requirements
