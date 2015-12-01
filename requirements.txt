@@ -1,0 +1,6 @@
+scipy
+numpy
+sklearn
+statsmodels
+theano
+git+git://github.com/hmmlearn/hmmlearn.git#egg=hmmlearn
