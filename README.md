@@ -14,7 +14,7 @@ As of now, this package is not installable via pip.
 Instead, clone the current version from git using:
 
 ```bash
-$ git clone https://github.com/mackelab/arhmm.git
+$ git clone https://github.com/mackelab/autohmm.git
 ```
 
 And run the installation script in the source directory:
@@ -43,8 +43,3 @@ samples, states = model.sample(n_samples=500)
 The documentation is available at:
 
 [http://mackelab.github.io/autohmm/](http://mackelab.github.io/autohmm/)
-
-
-## License
-
-...

@@ -318,6 +318,7 @@ class THMM(_BaseHMM):
         ----------
         X : array-like, shape (n_samples, 1)
             Feature matrix of individual samples.
+
         lengths : array-like of integers, shape (n_sequences, )
             Lengths of the individual sequences in ``X``. The sum of
             these should be ``n_samples``.
