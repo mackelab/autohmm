@@ -27,7 +27,73 @@ class ARTHMM(THMM):
 
     Parameters
     ----------
-    ... Same as in THMM, in addition:
+    n_unique : int
+        Number of unique components.
+
+    n_tied : int
+        Number of tied states for each component.
+
+    tied_precision : bool
+        If set to true, precision (inverse variance) is shared across states.
+
+    algorithm : string
+        Decoding algorithm.
+
+    params : string
+        Controls which parameters are updated in the training
+        process. Defaults to all parameters.
+
+    init_params : string
+        Controls which parameters are initialized prior to
+        training. Defaults to all parameters.
+
+    startprob_init : array, shape (``n_unique``)
+        Initial state occupation distribution.
+
+    startprob_prior : array, shape (``n_unique``)
+        Pseudo-observations (counts).
+
+    transmat_init : array, shape (``n_unique``, ``n_unique``)
+        Matrix of transition probabilities between states.
+
+    transmat_prior : array, shape (``n_unique``, ``n_unique``)
+        Pseudo-observations (counts).
+
+    mu_init : array, shape (``n_unique``)
+        Initial mean parameters for each state.
+
+    mu_weight : int
+        Weight of mu prior, shared across components.
+
+    mu_prior : array, shape (``n_unique``)
+        Prior on mu.
+
+    precision_init : array, shape (``n_unique``)
+        Initial precision (inverse variance) parameters for each state.
+
+    precision_weight : int
+        Weight of precision (inverse variance) prior.
+
+    precision_prior : array, shape (``n_unique``)
+        Prior on precision (inverse variance).
+
+    tol : float
+        Convergence threshold, below which EM will stop.
+
+    n_iter : int
+        Number of iterations to perform maximally.
+
+    n_iter_min : int
+        Number of iterations to perform minimally.
+
+    n_iter_update : int
+        Number of iterations per M-Step.
+
+    random_state : int
+        Sets seed.
+
+    verbose : bool
+        When ``True`` convergence reports are printed.
 
     n_lags : int
         Number of lags (order of AR).
@@ -46,7 +112,16 @@ class ARTHMM(THMM):
 
     Attributes
     ----------
-    ... Same as in THMM, in addition:
+    n_components : int
+        Number of total components
+
+    mu_ : array, shape (``n_unique``)
+
+    precision_ : array, shape (``n_unique``)
+
+    transmat_ :  array, shape (``n_unique``, ``n_unique``)
+
+    startprob_ :  array, shape (``n_unique``, ``n_unique``)
 
     n_lags : int
 
@@ -274,12 +349,28 @@ class ARTHMM(THMM):
     def fit(self, X, E=None, lengths=None):
         """Estimate model parameters.
 
+        An initialization step is performed before entering the
+        EM-algorithm. If you want to avoid this step for a subset of
+        the parameters, pass proper ``init_params`` keyword argument
+        to estimator's constructor.
+
+
         Parameters
         ----------
-        See thmm. Additionally:
+        X : array-like, shape (n_samples, 1)
+            Feature matrix of individual samples.
 
         E : array-like, shape (n_samples, n_inputs)
             Feature matrix of individual inputs.
+
+        lengths : array-like of integers, shape (n_sequences, )
+            Lengths of the individual sequences in ``X``. The sum of
+            these should be ``n_samples``.
+
+        Returns
+        -------
+        self : object
+            Returns self.
         """
         # TODO: account for external input
         data = self._process_inputs(X, E)
@@ -291,12 +382,17 @@ class ARTHMM(THMM):
 
         Parameters
         ----------
-        See thmm. Additionally:
+        X : array_like, shape (n)
+            Each row corresponds to a single data point.
 
         E : array-like, shape (n_samples, n_inputs)
             Feature matrix of individual inputs.
-        """
-        # TODO: account for external input
+
+        Returns
+        -------
+        logprob : float
+            Log likelihood of the ``X``.
+        """        # TODO: account for external input
         data = self._process_inputs(X, E)
         return self._do_score(data)
 
@@ -305,10 +401,19 @@ class ARTHMM(THMM):
 
         Parameters
         ----------
-        See thmm. Additionally:
+        X : array_like, shape (n)
+            Each row corresponds to a single point in the sequence.
 
         E : array-like, shape (n_samples, n_inputs)
             Feature matrix of individual inputs.
+
+        Returns
+        -------
+        logprob : float
+            Log likelihood of the sequence ``X``
+
+        posteriors : array_like, shape (n, n_components)
+            Posterior probabilities of each state for each observation
         """
         # TODO: account for external input
         data = self._process_inputs(X, E)
@@ -320,10 +425,27 @@ class ARTHMM(THMM):
 
         Parameters
         ----------
-        See thmm. Additionally:
+        X : array_like, shape (n)
+            Each row corresponds to a single point in the sequence.
 
         E : array-like, shape (n_samples, n_inputs)
             Feature matrix of individual inputs.
+
+        algorithm : string, one of the ``decoder_algorithms``
+            decoder algorithm to be used.
+            NOTE: Only Viterbi supported for now.
+
+        Returns
+        -------
+        logprob : float
+            Log probability of the maximum likelihood path through the HMM
+
+        reduced_state_sequence : array_like, shape (n,)
+            Index of the most likely states for each observation (accounting
+            for tied states by giving them the same index)
+
+        state_sequence : array_like, shape (n,)
+            Index of the most likely states for each observation
         """
         # TODO: account for external input
         data = self._process_inputs(X, E)
@@ -335,7 +457,15 @@ class ARTHMM(THMM):
 
         Parameters
         ----------
-        See thmm. Additionally:
+        n : int
+            Number of samples to generate.
+
+        observed_states : array
+            If provided, states are not sampled.
+
+        random_state: RandomState or an int seed
+            A random number generator instance. If None is given, the
+            object's random_state is used
 
         init_state : int
             If provided, initial state is not sampled.
@@ -348,7 +478,11 @@ class ARTHMM(THMM):
 
         Returns
         -------
-        See thmm.
+        samples : array_like, length (``n_samples``)
+                  List of samples
+
+        ustates : array_like, shape (``n_samples``)
+                 List of hidden states
         """
         # TODO: account for external input
         if random_state is None:
