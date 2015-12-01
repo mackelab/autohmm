@@ -1,4 +1,4 @@
-# autohmm
+# autohmm [![Build Status](https://travis-ci.org/mackelab/autohmm.svg?branch=master)](https://travis-ci.org/mackelab/autohmm)
 
 Description ..
 
