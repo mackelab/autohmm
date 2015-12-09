@@ -150,7 +150,7 @@ class THMM(_AUTO):
         else:
             self.wrt_dims.update({'p': (1)})
         self.wrt_bounds.update({'m': (-50.0, 50.0)})
-        self.wrt_bounds.update({'p': (0.001, 5000.0)})
+        self.wrt_bounds.update({'p': (0.001, 10000.0)})
 
         self.hmm_obs   = bc(self.xn, 1)
         self.hmm_mean  = self.m
