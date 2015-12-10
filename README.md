@@ -1,28 +1,28 @@
-# autohmm [![Build Status](https://travis-ci.org/mackelab/autohmm.svg?branch=master)](https://travis-ci.org/mackelab/autohmm)
+# autohmm [![Build Status](https://travis-ci.org/mackelab/autohmm.svg?branch=master)](https://travis-ci.org/mackelab/autohmm) [![Docs](https://img.shields.io/badge/docs-latest-brightgreen.svg?style=flat)](http://www.mackelab.org/autohmm/)
 
-Description ..
+This packages provides an implementation of Hidden Markov Models (HMMs) with tied states and autoregressive observations, written in Python. For HMM recursions, the C implementations of the [hmmlearn package](https://github.com/hmmlearn/hmmlearn) are used. Evaluation of the likelihood function and the maximization of the expected complete data log-likelihood is implemented in [Theano](https://github.com/Theano/Theano), to allow quick development of novel models.
+
+**Important: The code in this repository is still experimental, and APIs are subject to change without warning.**
 
 ## Installation
 
-Install the dependencies:
-
-```bash
-$ pip install hmmlearn numpy scipy scikit-learn statsmodels theano
-```
-
-As of now, this package is not installable via pip.
-Instead, clone the current version from git using:
+As of now, this package is not installable via pip. Instead, clone the current version from git:
 
 ```bash
 $ git clone https://github.com/mackelab/autohmm.git
 ```
 
-And run the installation script in the source directory:
+The dependencies are listed in `requirements.txt`. If you are using pip, you can install the dependencies through:
+
+```bash
+$ pip install -r requirements.txt
+```
+
+To install autohmm, call `make` or:
 
 ```bash
 $ python setup.py install
 ```
-
 
 ## Quick Example
 
@@ -40,6 +40,4 @@ samples, states = model.sample(n_samples=500)
 
 ## Documentation
 
-The documentation is available at:
-
-[http://mackelab.github.io/autohmm/](http://mackelab.github.io/autohmm/)
+**An early stage version of the documentation is available at: [http://mackelab.github.io/autohmm/](http://mackelab.github.io/autohmm/)**
