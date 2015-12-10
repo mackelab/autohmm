@@ -20,7 +20,7 @@ def fit_hmm_and_monitor_log_likelihood(h, X, n_iter=1):
     loglikelihoods = np.empty(n_iter, dtype=float)
     for i in range(n_iter):
         h.fit(X)
-        loglikelihoods[i] = h.score(X)
+        loglikelihoods[i], _ = h.score_samples(X)
     return loglikelihoods
 
 class PlainGaussianHMM(TestCase):
@@ -46,7 +46,7 @@ class PlainGaussianHMM(TestCase):
         lengths = 1000
         X, _state_sequence = h.sample(lengths, random_state=self.prng)
 
-        # Mess up the parameters and see if we can re-learn them.
+        # Perturb
         h.startprob_ = normalize(self.prng.rand(self.n_components))
         h.transmat_ = normalize(self.prng.rand(self.n_components,
                                                self.n_components), axis=1)

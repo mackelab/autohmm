@@ -17,7 +17,6 @@ from nose.plugins.skip import SkipTest
 
 np.seterr(all='warn')
 
-
 def test_alpha_wrong_nlags():
     with assert_raises(ValueError):
         h = ar.ARTHMM(n_unique=2, n_lags=1, tied_alpha=False)
@@ -35,14 +34,13 @@ def test_alpha_set_unique():
                               [0.2, 0.5], [0.2, 0.5], [0.2, 0.5]])
     assert_array_equal(h._alpha_, correct_alpha)
 
-
 def fit_hmm_and_monitor_log_likelihood(h, X, n_iter=1):
     h.n_iter = 1        # make sure we do a single iteration at a time
     h.init_params = ''  # and don't re-init params
     loglikelihoods = np.empty(n_iter, dtype=float)
     for i in range(n_iter):
         h.fit(X)
-        loglikelihoods[i] = h.score(X)
+        loglikelihoods[i], _ = h.score_samples(X)
     return loglikelihoods
 
 class ARGaussianHMM(TestCase):
