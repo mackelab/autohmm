@@ -133,7 +133,7 @@
 <dl class="class">
 <dt id="autohmm.tm.THMM">
 <em class="property">class </em><code class="descclassname">autohmm.tm.</code><code class="descname">THMM</code><span class="sig-paren">(</span><em>n_unique=2</em>, <em>n_tied=0</em>, <em>tied_precision=False</em>, <em>algorithm='viterbi'</em>, <em>params='abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ'</em>, <em>init_params='abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ'</em>, <em>startprob_init=None</em>, <em>startprob_prior=1.0</em>, <em>transmat_init=None</em>, <em>transmat_prior=1.0</em>, <em>mu_init=None</em>, <em>mu_weight=0.0</em>, <em>mu_prior=None</em>, <em>precision_init=None</em>, <em>precision_weight=0.0</em>, <em>precision_prior=None</em>, <em>tol=0.0001</em>, <em>n_iter=25</em>, <em>n_iter_min=2</em>, <em>n_iter_update=1</em>, <em>random_state=None</em>, <em>verbose=False</em><span class="sig-paren">)</span><a class="headerlink" href="#autohmm.tm.THMM" title="Permalink to this definition">¶</a></dt>
-<dd><p>Hidden Markov Model with Tied States, Gaussian Observations and Priors</p>
+<dd><p>Hidden Markov Model with tied states</p>
 <table class="docutils field-list" frame="void" rules="none">
 <col class="field-name" />
 <col class="field-body" />
@@ -201,7 +201,7 @@ training. Defaults to all parameters.</li>
 <dl class="method">
 <dt id="autohmm.tm.THMM.decode">
 <code class="descname">decode</code><span class="sig-paren">(</span><em>X</em>, <em>algorithm='viterbi'</em><span class="sig-paren">)</span><a class="headerlink" href="#autohmm.tm.THMM.decode" title="Permalink to this definition">¶</a></dt>
-<dd><p>Find most likely state sequence corresponding to <code class="docutils literal"><span class="pre">obs</span></code>.
+<dd><p>Find most likely state sequence corresponding to <code class="docutils literal"><span class="pre">X</span></code>.
 Uses the selected algorithm for decoding.</p>
 <table class="docutils field-list" frame="void" rules="none">
 <col class="field-name" />
@@ -209,16 +209,14 @@ Uses the selected algorithm for decoding.</p>
 <tbody valign="top">
 <tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first simple">
 <li><strong>X</strong> (<em>array_like, shape (n)</em>) &#8211; Each row corresponds to a single point in the sequence.</li>
-<li><strong>algorithm</strong> (string, one of the <code class="docutils literal"><span class="pre">decoder_algorithms</span></code>) &#8211; decoder algorithm to be used.
-NOTE: Only Viterbi supported for now.</li>
+<li><strong>algorithm</strong> (string, one of the <code class="docutils literal"><span class="pre">decoder_algorithms</span></code>) &#8211; decoder algorithm to be used.</li>
 </ul>
 </td>
 </tr>
 <tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body"><p class="first last"><ul class="simple">
 <li><strong>logprob</strong> (<em>float</em>) &#8211; Log probability of the maximum likelihood path through the HMM</li>
-<li><strong>reduced_state_sequence</strong> (<em>array_like, shape (n,)</em>) &#8211; Index of the most likely states for each observation (accounting
+<li><strong>state_sequence</strong> (<em>array_like, shape (n,)</em>) &#8211; Index of the most likely states for each observation (accounting
 for tied states by giving them the same index)</li>
-<li><strong>state_sequence</strong> (<em>array_like, shape (n,)</em>) &#8211; Index of the most likely states for each observation</li>
 </ul>
 </p>
 </td>
@@ -259,7 +257,7 @@ these should be <code class="docutils literal"><span class="pre">n_samples</span
 <dl class="method">
 <dt id="autohmm.tm.THMM.sample">
 <code class="descname">sample</code><span class="sig-paren">(</span><em>n_samples=2000</em>, <em>observed_states=None</em>, <em>random_state=None</em><span class="sig-paren">)</span><a class="headerlink" href="#autohmm.tm.THMM.sample" title="Permalink to this definition">¶</a></dt>
-<dd><p>Generate random samples from the model.</p>
+<dd><p>Generate random samples from the self.</p>
 <table class="docutils field-list" frame="void" rules="none">
 <col class="field-name" />
 <col class="field-body" />
@@ -274,28 +272,11 @@ object&#8217;s random_state is used</li>
 </tr>
 <tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body"><p class="first last"><ul class="simple">
 <li><strong>samples</strong> (array_like, length (<code class="docutils literal"><span class="pre">n_samples</span></code>)) &#8211; List of samples</li>
-<li><strong>ustates</strong> (array_like, shape (<code class="docutils literal"><span class="pre">n_samples</span></code>)) &#8211; List of hidden states</li>
+<li><strong>states</strong> (array_like, shape (<code class="docutils literal"><span class="pre">n_samples</span></code>)) &#8211; List of hidden states (accounting for tied states by giving
+them the same index)</li>
 </ul>
 </p>
 </td>
-</tr>
-</tbody>
-</table>
-</dd></dl>
-
-<dl class="method">
-<dt id="autohmm.tm.THMM.score">
-<code class="descname">score</code><span class="sig-paren">(</span><em>X</em><span class="sig-paren">)</span><a class="headerlink" href="#autohmm.tm.THMM.score" title="Permalink to this definition">¶</a></dt>
-<dd><p>Compute the log probability under the model.</p>
-<table class="docutils field-list" frame="void" rules="none">
-<col class="field-name" />
-<col class="field-body" />
-<tbody valign="top">
-<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><strong>X</strong> (<em>array_like, shape (n)</em>) &#8211; Each row corresponds to a single data point.</td>
-</tr>
-<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body"><strong>logprob</strong> &#8211; Log likelihood of the <code class="docutils literal"><span class="pre">X</span></code>.</td>
-</tr>
-<tr class="field-odd field"><th class="field-name">Return type:</th><td class="field-body">float</td>
 </tr>
 </tbody>
 </table>
