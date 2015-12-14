@@ -645,13 +645,9 @@ class THMM(_BaseAUTOHMM):
         else:
             precision_prior = np.asarray(precision_prior)
             if self.tied_precision is True:
-                if np.max(precision_prior) != np.min(precision_prior):
-                    raise ValueError("elements not equal (tied_precision)")
                 if len(precision_prior) == 1:
                     self._precision_prior_ = np.tile(precision_prior,
                                                      self.n_components)
-                elif len(precision_prior) == self.n_unique:
-                    self._precision_prior_ = precision_prior.copy()
                 else:
                     raise ValueError("cannot match shape of precision_prior")
             else:
@@ -659,7 +655,10 @@ class THMM(_BaseAUTOHMM):
                     self._precision_prior_ = np.tile(precision_prior,
                                                      self.n_components)
                 elif len(precision_prior) == self.n_unique:
-                    self._precision_prior_ = precision_prior.copy()  # TODO: make sure precision prior has dim n_components (!)
+                    self._precision_prior_ = np.zeros(self.n_components)
+                    for u in range(self.n_unique):
+                        for t in range(self.n_chain):
+                            self._precision_prior_[u*(self.n_chain)+t] = precision_prior[u].copy()
                 else:
                     raise ValueError("cannot match shape of precision_prior")
 
