@@ -410,7 +410,7 @@ class THMM(_BaseAUTOHMM):
                 posteriors = self._compute_posteriors(fwdlattice, bwdlattice)
                 self._accumulate_sufficient_statistics(
                     stats, X[i:j], framelogprob, posteriors, fwdlattice,
-                    bwdlattice, self.params)
+                    bwdlattice)
                 if self.n_tied > 0:
                     for u in range(self.n_unique):
                         cols = range(u*(self.n_chain),
