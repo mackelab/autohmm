@@ -14,6 +14,17 @@ from autohmm import tm
 
 np.seterr(all='warn')
 
+def test_precision_prior_wrong_nb():
+    with assert_raises(ValueError):
+        m = tm.THMM(n_unique = 2, tied_precision = True)
+        m.precision_prior_ = np.array([0.7, 0.8])
+
+def test_precision_prior_unique():
+    m = tm.THMM(n_unique = 2, n_tied = 1)
+    m.precision_prior_ = np.array([[0.7], [0.3]])
+    correct_prior = np.array([0.7, 0.7, 0.3, 0.3])
+    assert_array_equal(m._precision_prior_, correct_prior)
+
 def fit_hmm_and_monitor_log_likelihood(h, X, n_iter=1):
     h.n_iter = 1        # make sure we do a single iteration at a time
     h.init_params = ''  # and don't re-init params
