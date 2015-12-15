@@ -37,10 +37,7 @@ gh-pages:
 	rm -rf $(GH_PAGES_DIRS)
 	git checkout master $(GH_PAGES_BUILD)
 	git reset HEAD
-	cd docs
-	make html
-	mv -fv _build/html/* ../
-	cd ..
+	cd docs && make html && mv -fv _build/html/* ../
 	rm -rf $(GH_PAGES_BUILD)
 	git add -A
 	git commit -m "Generated gh-pages for `git log master -1 --pretty=short --abbrev-commit`" && git push origin gh-pages ; git checkout master
