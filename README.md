@@ -40,4 +40,4 @@ samples, states = model.sample(n_samples=500)
 
 ## Documentation
 
-**An early stage version of the documentation is available at: [http://mackelab.github.io/autohmm/](http://mackelab.github.io/autohmm/)**
+**An early stage version of the documentation is available at: [http://www.mackelab.org/autohmm/](http://www.mackelab.org/autohmm/)**
