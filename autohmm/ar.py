@@ -106,6 +106,15 @@ class ARTHMM(THMM):
     alpha_init : array, shape (``n_components``, ``n_lags``)
         Initial alpha parameter per state.
 
+    mu_bounds : array, shape (``2``)
+        Upper and lower bound for mu [lower bound, upper bound].
+
+    precision_bounds : array, shape (``2``)
+        Upper and lower bound for precision [lower bound, upper bound].
+
+    alpha_bounds : array, shape(``2``)
+        Upper and lower bound for alpha [lower bound, upper bound].
+
     Attributes
     ----------
     n_components : int
@@ -134,7 +143,10 @@ class ARTHMM(THMM):
                  mu_init=None, precision_init=None,
                  precision_prior=None, precision_weight=0.0, mu_prior=None,
                  mu_weight=0.0, tied_alpha=True,
-                 tied_precision=False, n_iter_update=1, verbose=False):
+                 tied_precision=False, n_iter_update=1, verbose=False,
+                 mu_bounds=np.array([-50.0, 50.0]),
+                 precision_bounds=np.array([0.001, 10000.0]),
+                 alpha_bounds=np.array([-10.0, 10.0])):
         super(ARTHMM, self).__init__(n_unique=n_unique, n_tied=n_tied,
                                      tied_precision=tied_precision,
                                      algorithm=algorithm,
@@ -151,11 +163,15 @@ class ARTHMM(THMM):
                                      n_iter=n_iter, n_iter_min=n_iter_min,
                                      n_iter_update=n_iter_update,
                                      random_state=random_state,
-                                     verbose=verbose)
+                                     verbose=verbose,
+                                     mu_bounds=mu_bounds,
+                                     precision_bounds=precision_bounds)
         self.alpha_ = alpha_init
         self.tied_alpha = tied_alpha
 
         self.n_lags = n_lags
+
+        self.alpha_bounds = alpha_bounds
 
         if self.n_lags > 0:
             self.xln = tt.dmatrix('xln')  # N x n_lags
@@ -168,7 +184,7 @@ class ARTHMM(THMM):
                 self.wrt_dims.update({'a': (self.n_unique, self.n_lags)})
             else:
                 self.wrt_dims.update({'a': (1, self.n_lags)})
-            self.wrt_bounds.update({'a': (-10.0, 10.0)})
+            self.wrt_bounds.update({'a': (self.alpha_bounds[0], self.alpha_bounds[1])})
 
             if not self.tied_alpha:
                 self.hmm_mean = self.hmm_mean + tt.dot(self.xln, self.a.T)

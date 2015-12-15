@@ -103,6 +103,12 @@ class THMM(_BaseAUTOHMM):
     verbose : bool
         When ``True`` convergence reports are printed.
 
+    mu_bounds : array, shape (``2``)
+        Upper and lower bound for mu [lower bound, upper bound].
+
+    precision_bounds : array, shape (``2``)
+        Upper and lower bound for precision [lower bound, upper bound].
+
     Attributes
     ----------
     n_components : int
@@ -125,7 +131,9 @@ class THMM(_BaseAUTOHMM):
                  precision_init=None, precision_weight=0.0,
                  precision_prior=None, tol=1e-4,
                  n_iter=25, n_iter_min=2, n_iter_update=1,
-                 random_state=None, verbose=False):
+                 random_state=None, verbose=False,
+                 mu_bounds=np.array([-50.0, 50.0]),
+                 precision_bounds=np.array([0.001, 10000.0])):
         super(THMM, self).__init__(algorithm=algorithm, params=params,
                                    init_params=init_params, tol=tol,
                                    n_iter=n_iter, n_iter_min=n_iter_min,
@@ -136,6 +144,8 @@ class THMM(_BaseAUTOHMM):
         self.n_unique = n_unique
         self.n_components = n_unique * self.n_chain
         self.n_features = 1  # only univariate observations implemented
+        self.mu_bounds = mu_bounds
+        self.precision_bounds = precision_bounds
 
         # parameters are passed to a setters
         # setters check for shape and set default values
@@ -150,6 +160,7 @@ class THMM(_BaseAUTOHMM):
         self.precision_weight_ = precision_weight
         self.precision_prior_ = precision_prior
         self.tied_precision = tied_precision
+
 
         self.xn = tt.dmatrix('xn')  # N x 1
         self.gn = tt.dmatrix('gn')  # N x n_unique
@@ -173,8 +184,8 @@ class THMM(_BaseAUTOHMM):
             self.wrt_dims.update({'p': (self.n_unique,)})
         else:
             self.wrt_dims.update({'p': (1)})
-        self.wrt_bounds.update({'m': (-50.0, 50.0)})
-        self.wrt_bounds.update({'p': (0.001, 10000.0)})
+        self.wrt_bounds.update({'m': (self.mu_bounds[0], self.mu_bounds[1])})
+        self.wrt_bounds.update({'p': (self.precision_bounds[0], self.precision_bounds[1])})
 
         self.hmm_obs   = bc(self.xn, 1)
         self.hmm_mean  = self.m
