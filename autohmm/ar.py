@@ -97,7 +97,7 @@ class ARTHMM(THMM):
     n_lags : int
         Number of lags (order of AR).
 
-    tied_alpha : bool
+    shared_alpha : bool
         If set to true, alpha is shared across states.
 
     alpha_init : array, shape (``n_components``, ``n_lags``)
@@ -139,7 +139,7 @@ class ARTHMM(THMM):
                  init_params=string.ascii_letters, alpha_init=None,
                  mu_init=None, precision_init=None,
                  precision_prior=None, precision_weight=0.0, mu_prior=None,
-                 mu_weight=0.0, tied_alpha=True,
+                 mu_weight=0.0, shared_alpha=True,
                  n_iter_update=1, verbose=False,
                  mu_bounds=np.array([-50.0, 50.0]),
                  precision_bounds=np.array([0.001, 10000.0]),
@@ -163,7 +163,7 @@ class ARTHMM(THMM):
                                      mu_bounds=mu_bounds,
                                      precision_bounds=precision_bounds)
         self.alpha_ = alpha_init
-        self.tied_alpha = tied_alpha
+        self.shared_alpha = shared_alpha
 
         self.n_lags = n_lags
 
@@ -176,13 +176,13 @@ class ARTHMM(THMM):
             self.inputs_hmm_ll.extend([self.xln, self.a])
             self.inputs_neg_ll.extend([self.xln, self.a])
             self.wrt.extend([self.a])
-            if not self.tied_alpha:
+            if not self.shared_alpha:
                 self.wrt_dims.update({'a': (self.n_unique, self.n_lags)})
             else:
                 self.wrt_dims.update({'a': (1, self.n_lags)})
             self.wrt_bounds.update({'a': (self.alpha_bounds[0], self.alpha_bounds[1])})
 
-            if not self.tied_alpha:
+            if not self.shared_alpha:
                 self.hmm_mean = self.hmm_mean + tt.dot(self.xln, self.a.T)
             else:
                 self.hmm_mean = self.hmm_mean + bc(tt.dot(self.xln, self.a.T),1)
@@ -198,7 +198,7 @@ class ARTHMM(THMM):
         values.update({'xn': data['obs'][from_:to_]})
 
         if self.n_lags > 0:
-            if not self.tied_alpha:
+            if not self.shared_alpha:
                 alpha = self.alpha_
             else:
                 alpha = self.alpha_[0,:]
@@ -225,7 +225,7 @@ class ARTHMM(THMM):
                          }
 
                 if self.n_lags > 0:
-                    if not self.tied_alpha:
+                    if not self.shared_alpha:
                         alpha = self.alpha_
                     else:
                         alpha = self.alpha_[0,:]
@@ -263,7 +263,7 @@ class ARTHMM(THMM):
                 ar_mod = []
                 ar_alpha = []
                 ar_resid = []
-                if not self.tied_alpha:
+                if not self.shared_alpha:
                     for u in range(self.n_unique):
                         ar_mod.append(smapi.tsa.AR(X[kmmod.labels_ == \
                                                 u]).fit(self.n_lags))
@@ -283,7 +283,7 @@ class ARTHMM(THMM):
                 for u in range(self.n_unique):
                     for t in range(1+self.n_tied):
                         ar_idx = u
-                        if self.tied_alpha:
+                        if self.shared_alpha:
                             ar_idx = 0
                         self._mu_[u*(1+self.n_tied)+t] = kmeans[u, 0] - np.dot(
                             np.repeat(kmeans[u, 0], self.n_lags),
@@ -293,7 +293,7 @@ class ARTHMM(THMM):
                 self._precision_ = np.zeros(self.n_components)
                 for u in range(self.n_unique):
                     for t in range(1+self.n_tied):
-                        if not self.tied_alpha:
+                        if not self.shared_alpha:
                             maxVar = np.max([np.var(ar_resid[i]) for i in
                                             range(self.n_unique)])
                         else:
@@ -305,7 +305,7 @@ class ARTHMM(THMM):
                 for u in range(self.n_unique):
                     for t in range(1+self.n_tied):
                         ar_idx = u
-                        if self.tied_alpha:
+                        if self.shared_alpha:
                             ar_idx = 0
                         self._alpha_[u*(1+self.n_tied)+t, :] = \
                             ar_alpha[ar_idx]
@@ -522,9 +522,9 @@ class ARTHMM(THMM):
             alpha_val = np.atleast_2d(np.asarray(alpha_val))
             if alpha_val.shape[1] != self.n_lags:
                 raise ValueError("shape does not match n_lags")
-            if self.tied_alpha == True:
+            if self.shared_alpha == True:
                 if not (alpha_val == alpha_val[0]).all():
-                    raise ValueError("rows are not identical (tied_alpha)")
+                    raise ValueError("rows are not identical (shared_alpha)")
             if alpha_val.shape[0] == 1:
                 self._alpha_ = np.zeros((self.n_components, self.n_lags))
                 for k in range(self.n_components):

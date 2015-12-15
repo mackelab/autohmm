@@ -19,16 +19,16 @@ np.seterr(all='warn')
 
 def test_alpha_wrong_nlags():
     with assert_raises(ValueError):
-        h = ar.ARTHMM(n_unique=2, n_lags=1, tied_alpha=False)
+        h = ar.ARTHMM(n_unique=2, n_lags=1, shared_alpha=False)
         h.alpha_ = np.array([[0.1, 0.2], [0.2, 0.2]])
 
 def test_alpha_unqual_despite_tied():
     with assert_raises(ValueError):
-        h = ar.ARTHMM(n_unique=2, n_lags=1, tied_alpha=True)
+        h = ar.ARTHMM(n_unique=2, n_lags=1, shared_alpha=True)
         h.alpha_ = np.array([[0.1], [0.2]])
 
 def test_alpha_set_unique():
-    h = ar.ARTHMM(n_unique=2, n_tied=2, n_lags=2, tied_alpha=False)
+    h = ar.ARTHMM(n_unique=2, n_tied=2, n_lags=2, shared_alpha=False)
     h.alpha_ = np.array([[0.1, 0.2], [0.2, 0.5]])
     correct_alpha = np.array([[0.1, 0.2], [0.1, 0.2], [0.1, 0.2],
                               [0.2, 0.5], [0.2, 0.5], [0.2, 0.5]])
@@ -54,12 +54,12 @@ class ARGaussianHMM(TestCase):
         self.mu = np.array([2.0, -2.0])
         self.var = np.array([0.1, 0.3])
         self.alpha = np.array([[0.8], [0.25]])
-        self.tied_alpha = False
+        self.shared_alpha = False
 
         self.h = ar.ARTHMM(n_unique=self.n_unique,
                            n_lags=self.n_lags,
                            random_state=self.prng,
-                           tied_alpha=self.tied_alpha,
+                           shared_alpha=self.shared_alpha,
                            verbose=False)
         self.h.startprob_ = self.startprob
         self.h.transmat_ = self.transmat
