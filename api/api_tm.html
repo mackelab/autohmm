@@ -132,7 +132,7 @@
 <span id="api-for-thmm"></span><h1>API for THMM<a class="headerlink" href="#module-autohmm.tm" title="Permalink to this headline">¶</a></h1>
 <dl class="class">
 <dt id="autohmm.tm.THMM">
-<em class="property">class </em><code class="descclassname">autohmm.tm.</code><code class="descname">THMM</code><span class="sig-paren">(</span><em>n_unique=2</em>, <em>n_tied=0</em>, <em>tied_precision=False</em>, <em>algorithm='viterbi'</em>, <em>params='abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ'</em>, <em>init_params='abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ'</em>, <em>startprob_init=None</em>, <em>startprob_prior=1.0</em>, <em>transmat_init=None</em>, <em>transmat_prior=1.0</em>, <em>mu_init=None</em>, <em>mu_weight=0.0</em>, <em>mu_prior=None</em>, <em>precision_init=None</em>, <em>precision_weight=0.0</em>, <em>precision_prior=None</em>, <em>tol=0.0001</em>, <em>n_iter=25</em>, <em>n_iter_min=2</em>, <em>n_iter_update=1</em>, <em>random_state=None</em>, <em>verbose=False</em>, <em>mu_bounds=array([-50.</em>, <em>50.])</em>, <em>precision_bounds=array([  1.00000000e-03</em>, <em>1.00000000e+04])</em><span class="sig-paren">)</span><a class="headerlink" href="#autohmm.tm.THMM" title="Permalink to this definition">¶</a></dt>
+<em class="property">class </em><code class="descclassname">autohmm.tm.</code><code class="descname">THMM</code><span class="sig-paren">(</span><em>n_unique=2</em>, <em>n_tied=0</em>, <em>algorithm='viterbi'</em>, <em>params='abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ'</em>, <em>init_params='abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ'</em>, <em>startprob_init=None</em>, <em>startprob_prior=1.0</em>, <em>transmat_init=None</em>, <em>transmat_prior=1.0</em>, <em>mu_init=None</em>, <em>mu_weight=0.0</em>, <em>mu_prior=None</em>, <em>precision_init=None</em>, <em>precision_weight=0.0</em>, <em>precision_prior=None</em>, <em>tol=0.0001</em>, <em>n_iter=25</em>, <em>n_iter_min=2</em>, <em>n_iter_update=1</em>, <em>random_state=None</em>, <em>verbose=False</em>, <em>mu_bounds=array([-50.</em>, <em>50.])</em>, <em>precision_bounds=array([  1.00000000e-03</em>, <em>1.00000000e+04])</em><span class="sig-paren">)</span><a class="headerlink" href="#autohmm.tm.THMM" title="Permalink to this definition">¶</a></dt>
 <dd><p>Hidden Markov Model with tied states</p>
 <table class="docutils field-list" frame="void" rules="none">
 <col class="field-name" />
@@ -141,7 +141,6 @@
 <tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first last simple">
 <li><strong>n_unique</strong> (<em>int</em>) &#8211; Number of unique components.</li>
 <li><strong>n_tied</strong> (<em>int</em>) &#8211; Number of tied states for each component.</li>
-<li><strong>tied_precision</strong> (<em>bool</em>) &#8211; If set to true, precision (inverse variance) is shared across states.</li>
 <li><strong>algorithm</strong> (<em>string</em>) &#8211; Decoding algorithm.</li>
 <li><strong>params</strong> (<em>string</em>) &#8211; Controls which parameters are updated in the training
 process. Defaults to all parameters.</li>
