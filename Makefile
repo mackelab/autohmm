@@ -4,7 +4,7 @@
 PYTHON ?= python
 NOSETESTS ?= nosetests
 
-GH_PAGES_DIRS = _sources _static api
+GH_PAGES_DIRS = _sources _static _modules api
 GH_PAGES_BUILD = autohmm docs
 
 .PHONY: all clean docs test code-analysis
