@@ -41,9 +41,6 @@ class THMM(_BaseAUTOHMM):
     n_tied : int
         Number of tied states for each component.
 
-    tied_precision : bool
-        If set to true, precision (inverse variance) is shared across states.
-
     algorithm : string
         Decoding algorithm.
 
@@ -122,7 +119,7 @@ class THMM(_BaseAUTOHMM):
 
     startprob_ :  array, shape (``n_unique``, ``n_unique``)
     """
-    def __init__(self, n_unique=2, n_tied=0, tied_precision=False,
+    def __init__(self, n_unique=2, n_tied=0,
                  algorithm="viterbi",
                  params=string.ascii_letters, init_params=string.ascii_letters,
                  startprob_init=None, startprob_prior=1.0,
@@ -159,8 +156,6 @@ class THMM(_BaseAUTOHMM):
         self.precision_ = precision_init
         self.precision_weight_ = precision_weight
         self.precision_prior_ = precision_prior
-        self.tied_precision = tied_precision
-
 
         self.xn = tt.dmatrix('xn')  # N x 1
         self.gn = tt.dmatrix('gn')  # N x n_unique
@@ -169,10 +164,7 @@ class THMM(_BaseAUTOHMM):
         self.pw = tt.dscalar('pw')
         self.pp = tt.dvector('pp')  # n_unique
         self.m = tt.dvector('m')
-        if not self.tied_precision:
-            self.p = tt.dvector('p')
-        else:
-            self.p = tt.dscalar('p')
+        self.p = tt.dvector('p')
 
         self.inputs_hmm_ll.extend([self.xn, self.m, self.p])
         self.inputs_neg_ll.extend([self.xn, self.m, self.p, self.gn, self.mw,
@@ -180,10 +172,7 @@ class THMM(_BaseAUTOHMM):
 
         self.wrt.extend([self.m, self.p])
         self.wrt_dims.update({'m': (self.n_unique,)})
-        if not self.tied_precision:
-            self.wrt_dims.update({'p': (self.n_unique,)})
-        else:
-            self.wrt_dims.update({'p': (1)})
+        self.wrt_dims.update({'p': (self.n_unique,)})
         self.wrt_bounds.update({'m': (self.mu_bounds[0], self.mu_bounds[1])})
         self.wrt_bounds.update({'p': (self.precision_bounds[0], self.precision_bounds[1])})
 
@@ -215,10 +204,6 @@ class THMM(_BaseAUTOHMM):
                   'p': self.precision_}
         values.update({'xn': data['obs'][from_:to_]})
 
-        if self.tied_precision:
-            precision = self.precision_[0]
-            values.update({'p': precision})
-
         ll_eval = self._eval_hmm_ll(values)
         rep = self.n_chain
         return np.repeat(ll_eval, rep).reshape(-1, self.n_unique*rep)
@@ -236,10 +221,6 @@ class THMM(_BaseAUTOHMM):
                           'xn': data['obs'],
                           'gn': puc  # posteriors unique concatenated
                          }
-
-                if self.tied_precision:
-                    precision = self.precision_[0]
-                    values.update({'p': precision})
 
                 result = self._optim(p, values)
 
@@ -291,17 +272,10 @@ class THMM(_BaseAUTOHMM):
 
         if 'p' in params:
             self._precision_ = np.zeros(self.n_components)
-            if self.tied_precision is True:
-                precs = []
             for u in range(self.n_unique):
                 for t in range(self.n_chain):
-                    if self.tied_precision is False:
-                        self._precision_[u*(self.n_chain)+t] = 1.0 / np.var(
-                            X[kmmod.labels_ == u])
-                    else:
-                        precs.extend([1.0 / np.var(X[kmmod.labels_ == u])])
-            if self.tied_precision is True:
-                self.precision_ = np.array(np.mean(precs)).reshape(-1)
+                    self._precision_[u*(self.n_chain)+t] = 1.0 / np.var(
+                        X[kmmod.labels_ == u])
 
     def _do_mstep(self, stats, params):  # M-Step for startprob and transmat
         if 's' in params:
@@ -608,27 +582,15 @@ class THMM(_BaseAUTOHMM):
             self._precision_ = np.zeros(self.n_components)
         else:
             precision_val = np.asarray(precision_val)
-            if self.tied_precision is True:
-                if np.max(precision_val) != np.min(precision_val):
-                    raise ValueError("elements not equal (precision_val)")
-                if len(precision_val) == 1:
-                    self._precision_ = np.tile(precision_val,
-                                               self.n_components)
-                elif len(precision_val) == self.n_unique:
-                    self._precision_ = np.tile(precision_val[0],
-                                               self.n_components)
-                else:
-                    raise ValueError("cannot match shape of precision")
+            if len(precision_val) == self.n_components:
+                self._precision_ = precision_val.copy()
+            elif len(precision_val) == self.n_unique:
+                self._precision_ = np.zeros(self.n_components)
+                for u in range(self.n_unique):
+                    for t in range(self.n_chain):
+                        self._precision_[u*(self.n_chain)+t] = precision_val[u].copy()
             else:
-                if len(precision_val) == self.n_components:
-                    self._precision_ = precision_val.copy()
-                elif len(precision_val) == self.n_unique:
-                    self._precision_ = np.zeros(self.n_components)
-                    for u in range(self.n_unique):
-                        for t in range(self.n_chain):
-                            self._precision_[u*(self.n_chain)+t] = precision_val[u].copy()
-                else:
-                    raise ValueError("cannot match shape of precision")
+                raise ValueError("cannot match shape of precision")
 
     precision_ = property(_get_precision, _set_precision)
 
@@ -655,23 +617,16 @@ class THMM(_BaseAUTOHMM):
             self._precision_prior_ = np.zeros(self.n_components)
         else:
             precision_prior = np.asarray(precision_prior)
-            if self.tied_precision is True:
-                if len(precision_prior) == 1:
-                    self._precision_prior_ = np.tile(precision_prior,
-                                                     self.n_components)
-                else:
-                    raise ValueError("cannot match shape of precision_prior")
+            if len(precision_prior) == 1:
+                self._precision_prior_ = np.tile(precision_prior,
+                                                 self.n_components)
+            elif len(precision_prior) == self.n_unique:
+                self._precision_prior_ = np.zeros(self.n_components)
+                for u in range(self.n_unique):
+                    for t in range(self.n_chain):
+                        self._precision_prior_[u*(self.n_chain)+t] = precision_prior[u].copy()
             else:
-                if len(precision_prior) == 1:
-                    self._precision_prior_ = np.tile(precision_prior,
-                                                     self.n_components)
-                elif len(precision_prior) == self.n_unique:
-                    self._precision_prior_ = np.zeros(self.n_components)
-                    for u in range(self.n_unique):
-                        for t in range(self.n_chain):
-                            self._precision_prior_[u*(self.n_chain)+t] = precision_prior[u].copy()
-                else:
-                    raise ValueError("cannot match shape of precision_prior")
+                raise ValueError("cannot match shape of precision_prior")
 
     precision_prior_ = property(_get_precision_prior, _set_precision_prior)
 
