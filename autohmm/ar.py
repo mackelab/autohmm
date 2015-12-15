@@ -35,9 +35,6 @@ class ARTHMM(THMM):
     n_tied : int
         Number of tied states for each component.
 
-    tied_precision : bool
-        If set to true, precision (inverse variance) is shared across states.
-
     algorithm : string
         Decoding algorithm.
 
@@ -143,12 +140,11 @@ class ARTHMM(THMM):
                  mu_init=None, precision_init=None,
                  precision_prior=None, precision_weight=0.0, mu_prior=None,
                  mu_weight=0.0, tied_alpha=True,
-                 tied_precision=False, n_iter_update=1, verbose=False,
+                 n_iter_update=1, verbose=False,
                  mu_bounds=np.array([-50.0, 50.0]),
                  precision_bounds=np.array([0.001, 10000.0]),
                  alpha_bounds=np.array([-10.0, 10.0])):
         super(ARTHMM, self).__init__(n_unique=n_unique, n_tied=n_tied,
-                                     tied_precision=tied_precision,
                                      algorithm=algorithm,
                                      params=params, init_params=init_params,
                                      startprob_init=startprob_init,
@@ -201,10 +197,6 @@ class ARTHMM(THMM):
                   'p': self.precision_}
         values.update({'xn': data['obs'][from_:to_]})
 
-        if self.tied_precision:
-            precision = self.precision_[0]
-            values.update({'p': precision})
-
         if self.n_lags > 0:
             if not self.tied_alpha:
                 alpha = self.alpha_
@@ -231,10 +223,6 @@ class ARTHMM(THMM):
                           'xn': data['obs'],
                           'gn': puc
                          }
-
-                if self.tied_precision:
-                    precision = self.precision_[0]
-                    values.update({'p': precision})
 
                 if self.n_lags > 0:
                     if not self.tied_alpha:

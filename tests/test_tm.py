@@ -16,8 +16,8 @@ np.seterr(all='warn')
 
 def test_precision_prior_wrong_nb():
     with assert_raises(ValueError):
-        m = tm.THMM(n_unique = 2, tied_precision = True)
-        m.precision_prior_ = np.array([0.7, 0.8])
+        m = tm.THMM(n_unique = 2)
+        m.precision_prior_ = np.array([0.7, 0.8, 0.9])
 
 def test_precision_prior_unique():
     m = tm.THMM(n_unique = 2, n_tied = 1)
