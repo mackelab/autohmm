@@ -1,0 +1,15 @@
+Metadata-Version: 1.1
+Name: autohmm
+Version: 0.1.0
+Summary: Autoregressive Hidden Markov Models and extensions
+Home-page: https://github.com/mackelab/autohmm
+Author: Jan-Matthis Lueckmann
+Author-email: jan-matthis.lueckmann@caesar.de
+License: new BSD
+Description: UNKNOWN
+Keywords: Autoression,Autoregressive Hidden-Markov Model,HMM,machine learning,Python,Numpy,Scipy,Theano
+Platform: UNKNOWN
+Classifier: Development Status :: 3 - Alpha
+Classifier: License :: OSI Approved
+Classifier: Programming Language :: Python :: 2.7
+Classifier: Programming Language :: Python :: 3.4

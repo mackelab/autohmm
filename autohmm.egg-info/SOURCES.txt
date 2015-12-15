@@ -1,0 +1,11 @@
+setup.cfg
+setup.py
+autohmm/__init__.py
+autohmm/ar.py
+autohmm/base.py
+autohmm/tm.py
+autohmm/utils.py
+autohmm.egg-info/PKG-INFO
+autohmm.egg-info/SOURCES.txt
+autohmm.egg-info/dependency_links.txt
+autohmm.egg-info/top_level.txt
