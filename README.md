@@ -1,6 +1,6 @@
 # autohmm [![Build Status](https://travis-ci.org/mackelab/autohmm.svg?branch=master)](https://travis-ci.org/mackelab/autohmm) [![Docs](https://img.shields.io/badge/docs-latest-brightgreen.svg?style=flat)](http://www.mackelab.org/autohmm/)
 
-This packages provides an implementation of Hidden Markov Models (HMMs) with tied states and autoregressive observations, written in Python. For HMM recursions, the C implementations of the [hmmlearn package](https://github.com/hmmlearn/hmmlearn) are used. Evaluation of the likelihood function and the maximization of the expected complete data log-likelihood is implemented in [Theano](https://github.com/Theano/Theano), to allow quick development of novel models.
+This packages provides an implementation of Hidden Markov Models (HMMs) with tied states and autoregressive observations, written in Python. For HMM recursions, the C implementations of the [hmmlearn package](https://github.com/hmmlearn/hmmlearn) are used. Evaluation of the likelihood function and the maximization of the expected complete data log-likelihood is implemented in [autograd](https://github.com/HIPS/autograd), to allow quick development of novel models.
 
 **Important: The code in this repository is still experimental, and APIs are subject to change without warning.**
 

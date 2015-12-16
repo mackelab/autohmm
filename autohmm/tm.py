@@ -3,8 +3,6 @@ from __future__ import division, print_function, absolute_import
 import string
 import warnings
 
-import numpy as np
-
 from scipy import linalg
 from scipy import stats
 from scipy.stats import norm
@@ -14,8 +12,9 @@ from sklearn import cluster
 from sklearn.utils import check_random_state
 from sklearn.mixture import sample_gaussian
 
-import theano.tensor as tt
-from theano.tensor import addbroadcast as bc
+import autograd.numpy as np
+from autograd import grad, value_and_grad
+from scipy.optimize import minimize
 
 from hmmlearn.utils import normalize, iter_from_X_lengths
 
@@ -141,6 +140,7 @@ class THMM(_BaseAUTOHMM):
         self.n_unique = n_unique
         self.n_components = n_unique * self.n_chain
         self.n_features = 1  # only univariate observations implemented
+
         self.mu_bounds = mu_bounds
         self.precision_bounds = precision_bounds
 
@@ -157,77 +157,80 @@ class THMM(_BaseAUTOHMM):
         self.precision_weight_ = precision_weight
         self.precision_prior_ = precision_prior
 
-        self.xn = tt.dmatrix('xn')  # N x 1
-        self.gn = tt.dmatrix('gn')  # N x n_unique
-        self.mw = tt.dscalar('mw')
-        self.mp = tt.dvector('mp')  # n_unique
-        self.pw = tt.dscalar('pw')
-        self.pp = tt.dvector('pp')  # n_unique
-        self.m = tt.dvector('m')
-        self.p = tt.dvector('p')
-
-        self.inputs_hmm_ll.extend([self.xn, self.m, self.p])
-        self.inputs_neg_ll.extend([self.xn, self.m, self.p, self.gn, self.mw,
-                                   self.pw, self.mp, self.pp])
-
-        self.wrt.extend([self.m, self.p])
-        self.wrt_dims.update({'m': (self.n_unique,)})
-        self.wrt_dims.update({'p': (self.n_unique,)})
+        self.wrt.extend(['m', 'p'])
+        self.wrt_dims.update({'m': (self.n_unique, self.n_features)})
+        self.wrt_dims.update({'p': (self.n_unique, self.n_features)})
         self.wrt_bounds.update({'m': (self.mu_bounds[0], self.mu_bounds[1])})
-        self.wrt_bounds.update({'p': (self.precision_bounds[0], self.precision_bounds[1])})
-
-        self.hmm_obs   = bc(self.xn, 1)
-        self.hmm_mean  = self.m
-        self.hmm_prior = (self.pw-0.5) * tt.log(self.p) - \
-                         0.5*self.p*(self.mw*(self.m-self.mp)**2 + 2*self.pp)
-
-    @property
-    def hmm_ll_(self):
-        return -0.5*tt.log(2*np.pi) + 0.5*tt.log(self.p) - \
-               0.5*self.p*(self.hmm_obs-self.hmm_mean)**2
-               # N x n_unique
-
-    @property
-    def hmm_ell_(self):
-        return tt.sum(self.hmm_prior) + tt.sum(self.gn * self.hmm_ll_)
-               # (1,)
-
-    @property
-    def neg_ll_(self):
-        return -1*self.hmm_ell_
+        self.wrt_bounds.update({'p': (self.precision_bounds[0],
+                                      self.precision_bounds[1])})
 
     def _compute_log_likelihood(self, data, from_=0, to_=-1):
-        if self.compiled == False:  # check if Theano functions are compiled
-            self._compile()
-
-        values = {'m': self.mu_,
-                  'p': self.precision_}
-        values.update({'xn': data['obs'][from_:to_]})
-
-        ll_eval = self._eval_hmm_ll(values)
+        ll = self._ll(self.mu_, self.precision_, data['obs'][from_:to_])
         rep = self.n_chain
-        return np.repeat(ll_eval, rep).reshape(-1, self.n_unique*rep)
+        return np.repeat(ll, rep).reshape(-1, self.n_unique*rep)
+
+    def _ll(self, m, p, xn, **kwargs):
+        """Computation of log likelihood
+
+        Dimensions
+        ----------
+        m : n_unique x n_features
+        p : n_unique x n_features
+        xn: N x n_features
+        """
+        res = -0.5*np.log(2*np.pi) + 0.5*np.log(p.T) - \
+               0.5*p.T*(xn-m.T)**2  # N x n_unique
+        return res
+
+    def _obj(self, m, p, xn, gn, **kwargs):
+        ll = self._ll(m, p, xn)
+
+        mw = self.mu_weight_
+        mp = self.mu_prior_
+        pw = self.precision_weight_
+        pp = self.precision_prior_
+        prior = (pw-0.5) * np.log(p) - 0.5*p*(mw*(m-mp)**2 + 2*pp)
+
+        res = -1*(np.sum(gn * ll) + np.sum(prior))
+        return res
+
+    def _obj_grad(self, wrt, m, p, xn, gn, **kwargs):
+        res = grad(self._obj, wrt)(m, p, xn, gn)
+        res = np.array([res])
+        return res
 
     def _do_mstep_grad(self, puc, data):
         wrt = [str(p) for p in self.wrt if str(p) in self.params]
         for update_idx in range(self.n_iter_update):
             for p in wrt:
-                values = {'m': self.mu_,
-                          'p': self.precision_,
-                          'mw': self.mu_weight_,
-                          'mp': self.mu_prior_,
-                          'pw': self.precision_weight_,
-                          'pp': self.precision_prior_,
-                          'xn': data['obs'],
-                          'gn': puc  # posteriors unique concatenated
-                         }
-
-                result = self._optim(p, values)
-
                 if p == 'm':
-                    self.mu_ = result
+                    optim_x0 = self.mu_
+                    wrt_arg = 0
                 elif p == 'p':
-                    self.precision_ = result
+                    optim_x0 = self.precision_
+                    wrt_arg = 1
+                else:
+                    raise ValueError('unknown parameter')
+
+                optim_bounds = [self.wrt_bounds[p] for k in
+                                range(np.prod(self.wrt_dims[p]))]
+                result = minimize(fun=self._optim_wrap, jac=True,
+                                  x0=np.array(optim_x0).reshape(-1),
+                                  args=(p,
+                                        {'wrt': wrt_arg,
+                                         'p': self.precision_,
+                                         'm': self.mu_,
+                                         'xn': data['obs'],
+                                         'gn': puc  # post. uni. concat.
+                                        }),
+                                  bounds=optim_bounds,
+                                  method='TNC')
+
+                newv = result.x.reshape(self.wrt_dims[p])
+                if p == 'm':
+                    self.mu_ = newv
+                elif p == 'p':
+                    self.precision_ = newv
                 else:
                     raise ValueError('unknown parameter')
 
