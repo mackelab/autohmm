@@ -13,6 +13,9 @@ from hmmlearn.base import _BaseHMM, logsumexp
 import numpy as np
 import scipy.optimize
 
+
+decoder_algorithms = frozenset(("viterbi", "map"))
+
 class _BaseAUTOHMM(_BaseHMM):
     """autohmm base class
 
@@ -167,17 +170,16 @@ class _BaseAUTOHMM(_BaseHMM):
         posteriors /= np.sum(posteriors, axis=1).reshape((-1, 1))
         return logprob, posteriors
 
-    def _do_decode(self, X, algorithm=None, lengths=None):  # adapted hmmlearn
+    def _do_decode(self, data, algorithm=None, lengths=None):  # adapted hmmlearn
         # TODO: Support lengths arguement
-        if self.algorithm in decoder_algorithms:
-            algorithm = self.algorithm
-        elif algorithm in decoder_algorithms:
+        if algorithm in decoder_algorithms:
             algorithm = algorithm
+        elif self.algorithm in decoder_algorithms:
+            algorithm = self.algorithm
         decoder = {"viterbi": self._decode_viterbi,
                    "map": self._decode_map}
-        logprob, reduced_state_sequence, state_sequence = \
-            decoder[algorithm](data)
-        return logprob, reduced_state_sequence, state_sequence
+        logprob, state_sequence = decoder[algorithm](data)
+        return logprob, state_sequence
 
     def _decode_viterbi(self, data):  # adapted hmmlearn
         framelogprob = self._compute_log_likelihood(data)
