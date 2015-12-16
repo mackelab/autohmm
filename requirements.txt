@@ -2,5 +2,5 @@ scipy
 numpy
 scikit-learn
 statsmodels
-theano
+autograd
 git+git://github.com/hmmlearn/hmmlearn.git#egg=hmmlearn

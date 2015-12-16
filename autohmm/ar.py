@@ -3,8 +3,6 @@ from __future__ import division, print_function, absolute_import
 import string
 import warnings
 
-import numpy as np
-
 from scipy import stats
 from scipy.stats import norm
 from scipy.linalg import toeplitz, pinv
@@ -12,8 +10,9 @@ from scipy.linalg import toeplitz, pinv
 from sklearn import cluster
 from sklearn.utils import check_random_state
 
-import theano.tensor as tt
-from theano.tensor import addbroadcast as bc
+import autograd.numpy as np
+from autograd import grad, value_and_grad
+from scipy.optimize import minimize
 
 import statsmodels.api as smapi
 from statsmodels.tsa.tsatools import lagmat
@@ -21,6 +20,10 @@ from statsmodels.tsa.tsatools import lagmat
 from .tm import THMM
 
 __all__ = ['ARTHMM']
+
+ZEROLOGPROB = -1e200
+EPS = np.finfo(float).eps
+NEGINF = -np.inf
 
 decoder_algorithms = frozenset(("viterbi", "map"))
 
@@ -163,86 +166,100 @@ class ARTHMM(THMM):
                                      mu_bounds=mu_bounds,
                                      precision_bounds=precision_bounds)
         self.n_lags = n_lags
+        if self.n_lags < 1:
+            raise ValueError("n_lags needs to be greater than 0")
 
         self.alpha_ = alpha_init
         self.shared_alpha = shared_alpha
-
         self.alpha_bounds = alpha_bounds
 
-        if self.n_lags > 0:
-            self.xln = tt.dmatrix('xln')  # N x n_lags
-            self.a = tt.dmatrix('a')
-
-            self.inputs_hmm_ll.extend([self.xln, self.a])
-            self.inputs_neg_ll.extend([self.xln, self.a])
-            self.wrt.extend([self.a])
-            if not self.shared_alpha:
-                self.wrt_dims.update({'a': (self.n_unique, self.n_lags)})
-            else:
-                self.wrt_dims.update({'a': (1, self.n_lags)})
-            self.wrt_bounds.update({'a': (self.alpha_bounds[0], self.alpha_bounds[1])})
-
-            if not self.shared_alpha:
-                self.hmm_mean = self.hmm_mean + tt.dot(self.xln, self.a.T)
-            else:
-                self.hmm_mean = self.hmm_mean + bc(tt.dot(self.xln, self.a.T),1)
+        self.wrt.extend(['a'])
+        if not self.shared_alpha:
+            self.wrt_dims.update({'a': (self.n_unique, self.n_lags)})
         else:
-            raise ValueError("n_lags needs to be greater than 0")
-
-    # hmm_ll_, hmm_ell_, and neg_ll_ as in THMM
+            self.wrt_dims.update({'a': (1, self.n_lags)})
+        self.wrt_bounds.update({'a': (self.alpha_bounds[0],
+                                      self.alpha_bounds[1])})
 
     def _compute_log_likelihood(self, data, from_=0, to_=-1):
-        if self.compiled == False:  # check if Theano functions are compiled
-            self._compile()
+        ll = self._ll(self.mu_, self.precision_, self.alpha_,
+                      data['obs'][from_:to_],
+                      data['lagged'][from_:to_])
+        rep = self.n_chain
+        return np.repeat(ll, rep).reshape(-1, self.n_unique*rep)
 
-        values = {'m': self.mu_,
-                  'p': self.precision_}
-        values.update({'xn': data['obs'][from_:to_]})
+    def _ll(self, m, p, a, xn, xln, **kwargs):
+        """Computation of log likelihood
 
-        if self.n_lags > 0:
-            if not self.shared_alpha:
-                alpha = self.alpha_
-            else:
-                alpha = self.alpha_[0,:]
+        Dimensions
+        ----------
+        m :  n_unique x n_features
+        p :  n_unique x n_features
+        a :  n_unique x n_lags (shared_alpha=F)
+             OR     1 x n_lags (shared_alpha=T)
+        xn:  N x n_features
+        xln: N x n_lags
+        """
+        res = -0.5*np.log(2*np.pi) + 0.5*np.log(p.T) - \
+               0.5*p.T*(xn-(np.dot(xln, a.T) + m.T))**2  # N x n_unique
+        return res
 
-            values.update({'a': alpha,
-                           'xln': data['lagged'][from_:to_]})
+    def _obj(self, m, p, a, xn, xln, gn, **kwargs):
+        ll = self._ll(m, p, a, xn, xln)
 
-        ll_eval = self._eval_hmm_ll(values)
-        rep = self.n_tied+1
-        return np.repeat(ll_eval, rep).reshape(-1, self.n_unique*rep)
+        mw = self.mu_weight_
+        mp = self.mu_prior_
+        pw = self.precision_weight_
+        pp = self.precision_prior_
+        prior = (pw-0.5) * np.log(p) - 0.5*p*(mw*(m-mp)**2 + 2*pp)
+
+        res = -1*(np.sum(gn * ll) + np.sum(prior))
+        return res
+
+    def _obj_grad(self, wrt, m, p, a, xn, xln, gn, **kwargs):
+        res = grad(self._obj, wrt)(m, p, a, xn, xln, gn)
+        res = np.array([res])
+        return res
 
     def _do_mstep_grad(self, puc, data):
-        wrt = [str(p) for p in self.wrt if str(p) in \
-               self.params]
+        wrt = [str(p) for p in self.wrt if str(p) in self.params]
         for update_idx in range(self.n_iter_update):
             for p in wrt:
-                values = {'m': self.mu_,
-                          'p': self.precision_,
-                          'mw': self.mu_weight_,
-                          'mp': self.mu_prior_,
-                          'pw': self.precision_weight_,
-                          'pp': self.precision_prior_,
-                          'xn': data['obs'],
-                          'gn': puc
-                         }
-
-                if self.n_lags > 0:
-                    if not self.shared_alpha:
-                        alpha = self.alpha_
-                    else:
-                        alpha = self.alpha_[0,:]
-                    values.update({'a': alpha,
-                                   'xln': data['lagged']})
-
-                result = self._optim(p, values)
-
                 if p == 'm':
-                    self.mu_ = result
+                    optim_x0 = self.mu_
+                    wrt_arg = 0
                 elif p == 'p':
-                    self.precision_ = result
+                    optim_x0 = self.precision_
+                    wrt_arg = 1
                 elif p == 'a':
-                    self.alpha_ = result
+                    optim_x0 = self.alpha_
+                    wrt_arg = 2
+                else:
+                    raise ValueError('unknown parameter')
+
+                optim_bounds = [self.wrt_bounds[p] for k in
+                                range(np.prod(self.wrt_dims[p]))]
+                result = minimize(fun=self._optim_wrap, jac=True,
+                                  x0=np.array(optim_x0).reshape(-1),
+                                  args=(p,
+                                        {'wrt': wrt_arg,
+                                         'p': self.precision_,
+                                         'm': self.mu_,
+                                         'a': self.alpha_,
+                                         'xn': data['obs'],
+                                         'xln': data['lagged'],
+                                         'gn': puc  # post. uni. concat.
+                                        }),
+                                  bounds=optim_bounds,
+                                  method='TNC')
+
+                newv = result.x.reshape(self.wrt_dims[p])
+                if p == 'm':
+                    self.mu_ = newv
+                elif p == 'p':
+                    self.precision_ = newv
+                elif p == 'a':
+                    self.alpha_ = newv
                 else:
                     raise ValueError('unknown parameter')
 
@@ -511,9 +528,13 @@ class ARTHMM(THMM):
         return samples, states
 
     def _get_alpha(self):
-        # returns alpha as n_unique x n_lags
-        return self._alpha_[
-            [u*(1+self.n_tied) for u in range(self.n_unique)], :]
+        # returns alpha as n_unique x n_lags, if shared_alpha = False
+        # returns alpha as 1 x n_lags, if shared_alpha = True
+        if self.shared_alpha == False:
+            return self._alpha_[
+                [u*(1+self.n_tied) for u in range(self.n_unique)], :]
+        else:
+            return self._alpha_[0,:].reshape(1, self.n_lags)
 
     def _set_alpha(self, alpha_val):
         # new val needs to have a 1st dim of length n_unique x n_lags
@@ -555,16 +576,16 @@ class ARTHMM(THMM):
 
     def _get_ar_mean(self):
         # Calculates AR mean
-        if self.n_lags == 0:
-            raise NotImplementedError('not an autoregressive model')
         if self.n_inputs > 0:
             warnings.warn("additional dependency on input vector",
                           RuntimeWarning)
         means = np.zeros(self.n_unique)
+        ualphas = self._alpha_[
+                  [u*(1+self.n_tied) for u in range(self.n_unique)], :]
         for u in range(self.n_unique):
             num = self.mu_[u]
             denom = 1
-            denom -= np.sum(self.alpha_[u])
+            denom -= np.sum(ualphas[u])
             means[u] = num / denom
         return means
 

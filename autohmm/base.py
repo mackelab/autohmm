@@ -3,16 +3,9 @@ from __future__ import division, print_function, absolute_import
 import string
 import warnings
 
-import theano
-import theano.tensor as tt
-from theano.tensor import addbroadcast as bc
-from theano import function, scan, shared, pp
-
 from hmmlearn.base import _BaseHMM, logsumexp
 
-import numpy as np
-import scipy.optimize
-
+import autograd.numpy as np
 
 decoder_algorithms = frozenset(("viterbi", "map"))
 
@@ -70,87 +63,14 @@ class _BaseAUTOHMM(_BaseHMM):
         self.random_state = random_state
         self.verbose = verbose
 
-        # initialize variables for Theano
-        self.inputs_hmm_ll = []
-        self.inputs_neg_ll = []
         self.wrt = []
         self.wrt_dims = {}
         self.wrt_bounds = {}
-        self.compiled = False
 
-    def _compile(self, on_unused_input='ignore'):
-        self._tfun_hmm_ll_ = theano.function(inputs=self.inputs_hmm_ll,
-                                             outputs=self.hmm_ll_,
-                                             on_unused_input=on_unused_input)
-        self._tfun_obj_ = theano.function(inputs=self.inputs_neg_ll,
-                                          outputs=self.neg_ll_,
-                                          on_unused_input=on_unused_input)
-        params = [str(el) for el in self.wrt]
-        grad = theano.gradient.jacobian(self.neg_ll_, self.wrt)
-        self._tfun_grad_ = {param: theano.function(inputs=self.inputs_neg_ll,
-                                                   outputs=grad[param_idx],
-                                                   on_unused_input=\
-                                                       on_unused_input)
-                            for param_idx, param in enumerate(params)}
-        self.compiled = True
-
-    def _convert_shape(self, values):
-        for param in values:
-            if param in self.wrt_dims:
-                if self.wrt_dims[param] != (1) and \
-                   type(values[param]) != float:
-                    values[param] = values[param].reshape(self.wrt_dims[param])
-                else:
-                    if type(values[param]) == np.ndarray:
-                        values[param] = float(values[param][0])
-                    else:
-                        values[param] = float(values[param])
-        return values
-
-    def _eval_hmm_ll(self, values):
-        values = self._convert_shape(values)
-        return self._tfun_hmm_ll_(**values)
-
-    def _eval_nll(self, x, param, values, derivative=0, reshape=True):
-        if derivative == 0:
-            fn_handle = self._tfun_obj_
-        elif derivative == 1:
-            fn_handle = self._tfun_grad_[param]
-        else:
-            raise ValueError('not implemented')
-
-        values[param] = x
-        values = self._convert_shape(values)
-
-        result = fn_handle(**values)
-
-        if reshape is True and self.wrt_dims[param] != (1,):
-            return result.reshape(-1)
-        else:
-            return result
-
-    def _eval_grad_nll(self, *args, **kwargs):
-        kwargs.update({'derivative': 1})
-        return self._eval_nll(*args, **kwargs)
-
-    def _optim(self, param, values, optim_maxiter=50, disp=0):
-        if type(values[param]) != float:
-            optim_x0 = values[param].reshape(-1)
-        else:
-            optim_x0 = np.float64(values[param])
-
-        optim_bounds = [self.wrt_bounds[param] for k in
-                        range(np.prod(self.wrt_dims[param]))]
-
-        best_x, nfeval, rc = scipy.optimize.fmin_tnc(x0=optim_x0,
-                                         func=self._eval_nll,
-                                         fprime=self._eval_grad_nll,
-                                         args=(param, values),
-                                         bounds=optim_bounds,
-                                         disp = 0)  # optim_maxiter
-                                         # TODO: disp according to verbose arg
-        result = best_x.reshape(self.wrt_dims[param])
-        return result
+    def _optim_wrap(self, current_value, param, values = {}):
+        values[param] = np.array(current_value).reshape(self.wrt_dims[param])
+        return (self._obj(**values).reshape(-1),
+                self._obj_grad(**values).reshape(-1))
 
     # hmmlearn implements _do_viterbi_pass, _do_forward_pass,
     # _do_backward_pass, _compute_posteriors, _accumulate_sufficient_statistics
@@ -170,7 +90,7 @@ class _BaseAUTOHMM(_BaseHMM):
         posteriors /= np.sum(posteriors, axis=1).reshape((-1, 1))
         return logprob, posteriors
 
-    def _do_decode(self, data, algorithm=None, lengths=None):  # adapted hmmlearn
+    def _do_decode(self, data, algorithm=None, lengths=None):  # adapt. hmmlearn
         # TODO: Support lengths arguement
         if algorithm in decoder_algorithms:
             algorithm = algorithm
