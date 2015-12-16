@@ -117,9 +117,9 @@ class ARTHMM(THMM):
     n_components : int
         Number of total components
 
-    mu_ : array, shape (``n_unique``)
+    mu_ : array, shape (``n_unique``, ``n_features``)
 
-    precision_ : array, shape (``n_unique``)
+    precision_ : array, shape (``n_unique``, ``n_features``)
 
     transmat_ :  array, shape (``n_unique``, ``n_unique``)
 
@@ -282,36 +282,35 @@ class ARTHMM(THMM):
                     ar_resid.append(ar_mod[0].resid)
 
             if 'm' in params:
-                self._mu_ = np.zeros(self.n_components)
+                mu_init = np.zeros((self.n_unique, self.n_features))
                 for u in range(self.n_unique):
-                    for t in range(1+self.n_tied):
-                        ar_idx = u
-                        if self.shared_alpha:
-                            ar_idx = 0
-                        self._mu_[u*(1+self.n_tied)+t] = kmeans[u, 0] - np.dot(
+                    ar_idx = u
+                    if self.shared_alpha:
+                        ar_idx = 0
+                    mu_init[u] = kmeans[u, 0] - np.dot(
                             np.repeat(kmeans[u, 0], self.n_lags),
                             ar_alpha[ar_idx])
+                self.mu_ = np.copy(mu_init)
 
             if 'p' in params:
-                self._precision_ = np.zeros(self.n_components)
+                precision_init = np.zeros((self.n_unique, self.n_features))
                 for u in range(self.n_unique):
-                    for t in range(1+self.n_tied):
-                        if not self.shared_alpha:
-                            maxVar = np.max([np.var(ar_resid[i]) for i in
-                                            range(self.n_unique)])
-                        else:
-                            maxVar = np.var(ar_resid[0])
-                        self._precision_[u*(1+self.n_tied)+t] = 1.0 / maxVar
+                    if not self.shared_alpha:
+                        maxVar = np.max([np.var(ar_resid[i]) for i in
+                                        range(self.n_unique)])
+                    else:
+                        maxVar = np.var(ar_resid[0])
+                    precision_init[u] = 1.0 / maxVar
+                self.precision_ = np.copy(precision_init)
 
             if 'a' in params:
-                self._alpha_ = np.zeros((self.n_components, self.n_lags))
+                alpha_init = np.zeros((self.n_unique, self.n_lags))
                 for u in range(self.n_unique):
-                    for t in range(1+self.n_tied):
-                        ar_idx = u
-                        if self.shared_alpha:
-                            ar_idx = 0
-                        self._alpha_[u*(1+self.n_tied)+t, :] = \
-                            ar_alpha[ar_idx]
+                    ar_idx = u
+                    if self.shared_alpha:
+                        ar_idx = 0
+                    alpha_init[u, :] = ar_alpha[ar_idx]
+                self.alpha_ = alpha_init
 
     def _process_inputs(self, X, E=None, lengths=None):
         # Makes sure inputs have correct shape, generates features
@@ -518,21 +517,38 @@ class ARTHMM(THMM):
 
     def _set_alpha(self, alpha_val):
         # new val needs to have a 1st dim of length n_unique x n_lags
+        # if shared_alpha is true, a shape of 1 x n_lags is possible, too
         # internally, n_components x n_lags
         alpha_new = np.zeros((self.n_components, self.n_lags))
+
         if alpha_val is not None:
             if alpha_val.ndim == 1:
-                alpha_val = alpha_val.reshape(-1, 1)
-            if alpha_val.shape[0] != self.n_unique:
-                raise ValueError("shape[0] does not match n_unique")
+                alpha_val = alpha_val.reshape(-1, 1)  # make sure 2nd dim exists
+
             if alpha_val.shape[1] != self.n_lags:
                 raise ValueError("shape[1] does not match n_lags")
-            if self.shared_alpha == True and \
-                not (alpha_val == alpha_val[0,:]).all():
-                    raise ValueError("rows are not identical (shared_alpha)")
-            for u in range(self.n_unique):
-                for t in range(1+self.n_tied):
-                    alpha_new[u*(1+self.n_tied)+t, :] = alpha_val[u, :].copy()
+
+            if self.shared_alpha == False:
+                # alpha is not shared
+                if alpha_val.shape[0] != self.n_unique:
+                    raise ValueError("shape[0] does not match n_unique")
+                for u in range(self.n_unique):
+                    for t in range(1+self.n_tied):
+                        alpha_new[u*(1+self.n_tied)+t, :] = alpha_val[u, :].copy()
+            else:
+                # alpha is shared ...
+                if alpha_val.shape[0] != self.n_unique and \
+                  alpha_val.shape[0] != 1:
+                    # ... the shape should either be 1 x L or U x L
+                    raise ValueError("shape[0] is neither 1 nor does it match n_unique")
+                if alpha_val.shape[0] == self.n_unique and \
+                  not (alpha_val == alpha_val[0,:]).all():
+                    # .. in case of U x L the rows need to be identical
+                    raise ValueError("rows not identical (shared_alpha)")
+                for u in range(self.n_unique):
+                    for t in range(1+self.n_tied):
+                        alpha_new[u*(1+self.n_tied)+t, :] = alpha_val[0, :].copy()
+
         self._alpha_ = alpha_new
 
     alpha_ = property(_get_alpha, _set_alpha)

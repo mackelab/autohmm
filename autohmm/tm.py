@@ -111,9 +111,9 @@ class THMM(_BaseAUTOHMM):
     n_components : int
         Number of total components
 
-    mu_ : array, shape (``n_unique``)
+    mu_ : array, shape (``n_unique``, ``n_features``)
 
-    precision_ : array, shape (``n_unique``)
+    precision_ : array, shape (``n_unique``, ``n_features``)
 
     transmat_ :  array, shape (``n_unique``, ``n_unique``)
 
@@ -264,18 +264,18 @@ class THMM(_BaseAUTOHMM):
                 self.transmat_ = np.copy(transmat)
 
         if 'm' in params:
-            mu = np.zeros(self.n_components)
+            mu_init = np.zeros((self.n_unique, self.n_features))
             for u in range(self.n_unique):
                 for t in range(self.n_chain):
-                    mu[u*(self.n_chain)+t] = kmeans[u, 0]
-            self.mu_ = np.copy(mu)
+                    mu_init[u] = kmeans[u, 0]
+            self.mu_ = np.copy(mu_init)
 
         if 'p' in params:
-            self._precision_ = np.zeros(self.n_components)
+            precision_init = np.zeros((self.n_unique, self.n_features))
             for u in range(self.n_unique):
                 for t in range(self.n_chain):
-                    self._precision_[u*(self.n_chain)+t] = 1.0 / np.var(
-                        X[kmmod.labels_ == u])
+                    precision_init[u] = 1.0 / np.var(X[kmmod.labels_ == u])
+            self.precision_ = np.copy(precision_init)
 
     def _do_mstep(self, stats, params):  # M-Step for startprob and transmat
         if 's' in params:
@@ -525,9 +525,9 @@ class THMM(_BaseAUTOHMM):
             return self._mu_[[u*(self.n_chain) for u in range(self.n_unique)]]
 
     def _set_mu(self, mu_val):
-        # new val needs to have a 1st dim of length n_unique
+        # new val needs to have a 1st dim of length n_unique, n_features
         # internally, n_components x 1
-        mu_new = np.zeros((self.n_components, 1))
+        mu_new = np.zeros((self.n_components, self.n_features))
         if mu_val is not None:
             if len(mu_val) == self.n_unique:
                 for u in range(self.n_unique):
@@ -577,9 +577,9 @@ class THMM(_BaseAUTOHMM):
                 [u*(self.n_chain) for u in range(self.n_unique)]]
 
     def _set_precision(self, precision_val):
-        # new val needs to have a 1st dim of length n_unique
+        # new val needs to have a 1st dim of length n_unique, n_features
         # internally, n_components x 1
-        precision_new = np.zeros((self.n_components, 1))
+        precision_new = np.zeros((self.n_components, self.n_features))
         if precision_val is not None:
             if len(precision_val) == self.n_unique:
                 for u in range(self.n_unique):
