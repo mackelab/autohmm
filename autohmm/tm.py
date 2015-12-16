@@ -347,7 +347,7 @@ class THMM(_BaseAUTOHMM):
             reduced_sequence[np.logical_and(state_sequence >= limits[s],
                              state_sequence < limits[s+1])] = s
 
-        return reduced_sequence
+        return reduced_sequence.astype(int)
 
     def fit(self, X, lengths=None):
         """Estimate model parameters.
@@ -525,18 +525,17 @@ class THMM(_BaseAUTOHMM):
             return self._mu_[[u*(self.n_chain) for u in range(self.n_unique)]]
 
     def _set_mu(self, mu_val):
-        mu = np.zeros(self.n_components)
+        # new val needs to have a 1st dim of length n_unique
+        # internally, n_components x 1
+        mu_new = np.zeros((self.n_components, 1))
         if mu_val is not None:
-            mu_val = np.asarray(mu_val)
-            if len(mu_val) == self.n_components:
-                mu = mu_val.copy()
-            elif len(mu_val) == self.n_unique:
+            if len(mu_val) == self.n_unique:
                 for u in range(self.n_unique):
                     for t in range(self.n_chain):
-                        mu[u*(self.n_chain)+t] = mu_val[u].copy()
+                        mu_new[u*(self.n_chain)+t] = mu_val[u].copy()
             else:
                 raise ValueError("cannot match shape of mu")
-        self._mu_ = mu.reshape(-1,1)
+        self._mu_ = mu_new
 
     mu_ = property(_get_mu, _set_mu)
 
@@ -578,19 +577,17 @@ class THMM(_BaseAUTOHMM):
                 [u*(self.n_chain) for u in range(self.n_unique)]]
 
     def _set_precision(self, precision_val):
-        if precision_val is None:
-            self._precision_ = np.zeros(self.n_components)
-        else:
-            precision_val = np.asarray(precision_val)
-            if len(precision_val) == self.n_components:
-                self._precision_ = precision_val.copy()
-            elif len(precision_val) == self.n_unique:
-                self._precision_ = np.zeros(self.n_components)
+        # new val needs to have a 1st dim of length n_unique
+        # internally, n_components x 1
+        precision_new = np.zeros((self.n_components, 1))
+        if precision_val is not None:
+            if len(precision_val) == self.n_unique:
                 for u in range(self.n_unique):
                     for t in range(self.n_chain):
-                        self._precision_[u*(self.n_chain)+t] = precision_val[u].copy()
+                        precision_new[u*(self.n_chain)+t] = precision_val[u].copy()
             else:
                 raise ValueError("cannot match shape of precision")
+        self._precision_ = precision_new
 
     precision_ = property(_get_precision, _set_precision)
 
