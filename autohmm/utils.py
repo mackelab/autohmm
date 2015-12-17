@@ -3,6 +3,7 @@ from __future__ import division, print_function, absolute_import
 import time
 import sys
 from collections import deque
+import numpy as np
 
 class ConvergenceMonitor(object):
     """Monitors and reports convergence to :data:`sys.stderr`.
