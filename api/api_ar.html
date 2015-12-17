@@ -131,7 +131,7 @@
 <span id="api-for-arthmm"></span><h1>API for ARTHMM<a class="headerlink" href="#module-autohmm.ar" title="Permalink to this headline">¶</a></h1>
 <dl class="class">
 <dt id="autohmm.ar.ARTHMM">
-<em class="property">class </em><code class="descclassname">autohmm.ar.</code><code class="descname">ARTHMM</code><span class="sig-paren">(</span><em>n_unique=2</em>, <em>n_lags=0</em>, <em>n_tied=0</em>, <em>startprob_init=None</em>, <em>transmat_init=None</em>, <em>startprob_prior=1.0</em>, <em>transmat_prior=1.0</em>, <em>algorithm='viterbi'</em>, <em>random_state=None</em>, <em>n_iter=25</em>, <em>n_iter_min=2</em>, <em>tol=0.0001</em>, <em>params='abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ'</em>, <em>init_params='abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ'</em>, <em>alpha_init=None</em>, <em>mu_init=None</em>, <em>precision_init=None</em>, <em>precision_prior=None</em>, <em>precision_weight=0.0</em>, <em>mu_prior=None</em>, <em>mu_weight=0.0</em>, <em>shared_alpha=True</em>, <em>n_iter_update=1</em>, <em>verbose=False</em>, <em>mu_bounds=array([-50.</em>, <em>50.])</em>, <em>precision_bounds=array([  1.00000000e-03</em>, <em>1.00000000e+04])</em>, <em>alpha_bounds=array([-10.</em>, <em>10.])</em><span class="sig-paren">)</span><a class="headerlink" href="#autohmm.ar.ARTHMM" title="Permalink to this definition">¶</a></dt>
+<em class="property">class </em><code class="descclassname">autohmm.ar.</code><code class="descname">ARTHMM</code><span class="sig-paren">(</span><em>n_unique=2</em>, <em>n_lags=1</em>, <em>n_tied=0</em>, <em>startprob_init=None</em>, <em>transmat_init=None</em>, <em>startprob_prior=1.0</em>, <em>transmat_prior=1.0</em>, <em>algorithm='viterbi'</em>, <em>random_state=None</em>, <em>n_iter=25</em>, <em>n_iter_min=2</em>, <em>tol=0.0001</em>, <em>params='abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ'</em>, <em>init_params='abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ'</em>, <em>alpha_init=None</em>, <em>mu_init=None</em>, <em>precision_init=None</em>, <em>precision_prior=None</em>, <em>precision_weight=0.0</em>, <em>mu_prior=None</em>, <em>mu_weight=0.0</em>, <em>shared_alpha=True</em>, <em>n_iter_update=1</em>, <em>verbose=False</em>, <em>mu_bounds=array([-50.</em>, <em>50.])</em>, <em>precision_bounds=array([  1.00000000e-03</em>, <em>1.00000000e+04])</em>, <em>alpha_bounds=array([-10.</em>, <em>10.])</em><span class="sig-paren">)</span><a class="headerlink" href="#autohmm.ar.ARTHMM" title="Permalink to this definition">¶</a></dt>
 <dd><p>Hidden Markov Model with tied states and autoregressive observations</p>
 <table class="docutils field-list" frame="void" rules="none">
 <col class="field-name" />
@@ -181,13 +181,13 @@ training. Defaults to all parameters.</li>
 <dl class="attribute">
 <dt id="autohmm.ar.ARTHMM.mu_">
 <code class="descname">mu_</code><a class="headerlink" href="#autohmm.ar.ARTHMM.mu_" title="Permalink to this definition">¶</a></dt>
-<dd><p>array, shape (<code class="docutils literal"><span class="pre">n_unique</span></code>)</p>
+<dd><p>array, shape (<code class="docutils literal"><span class="pre">n_unique</span></code>, <code class="docutils literal"><span class="pre">n_features</span></code>)</p>
 </dd></dl>
 
 <dl class="attribute">
 <dt id="autohmm.ar.ARTHMM.precision_">
 <code class="descname">precision_</code><a class="headerlink" href="#autohmm.ar.ARTHMM.precision_" title="Permalink to this definition">¶</a></dt>
-<dd><p>array, shape (<code class="docutils literal"><span class="pre">n_unique</span></code>)</p>
+<dd><p>array, shape (<code class="docutils literal"><span class="pre">n_unique</span></code>, <code class="docutils literal"><span class="pre">n_features</span></code>)</p>
 </dd></dl>
 
 <dl class="attribute">
