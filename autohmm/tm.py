@@ -122,7 +122,7 @@ class THMM(_BaseAUTOHMM):
                  algorithm="viterbi",
                  params=string.ascii_letters, init_params=string.ascii_letters,
                  startprob_init=None, startprob_prior=1.0,
-                 transmat_init=None, transmat_prior=1.0,
+                 transmat_init=None, transmat_prior=None,
                  mu_init=None, mu_weight=0.0, mu_prior=None,
                  precision_init=None, precision_weight=0.0,
                  precision_prior=None, tol=1e-4,
@@ -711,6 +711,29 @@ class THMM(_BaseAUTOHMM):
     startprob_prior_ = property(_get_startprob_prior, _set_startprob_prior)
 
     def _ntied_transmat(self, transmat_val):  # TODO: document choices
+
+#                        +-----------------+
+#                        |a|1|0|0|0|0|0|0|0|
+#                        +-----------------+
+#                        |0|a|1|0|0|0|0|0|0|
+#                        +-----------------+
+#   +---+---+---+        |0|0|a|b|0|0|c|0|0|
+#   | a | b | c |        +-----------------+
+#   +-----------+        |0|0|0|e|1|0|0|0|0|
+#   | d | e | f | +----> +-----------------+
+#   +-----------+        |0|0|0|0|e|1|0|0|0|
+#   | g | h | i |        +-----------------+
+#   +---+---+---+        |d|0|0|0|0|e|f|0|0|
+#                        +-----------------+
+#                        |0|0|0|0|0|0|i|1|0|
+#                        +-----------------+
+#                        |0|0|0|0|0|0|0|i|1|
+#                        +-----------------+
+#                        |g|0|0|h|0|0|0|0|i|
+#                        +-----------------+
+# for a model with n_unique = 3 and n_tied = 2
+
+
         transmat = np.empty((0, self.n_components))
         for r in range(self.n_unique):
             row = np.empty((self.n_chain, 0))
@@ -778,17 +801,27 @@ class THMM(_BaseAUTOHMM):
     def _get_transmat_prior(self):
         return self.transmat_prior
 
-    def _set_transmat_prior(self, transmat_prior):
-        if transmat_prior is None or transmat_prior == 1.0:
-            transmat_prior = np.zeros((self.n_components, self.n_components))
-        else:
-            transmat_prior = np.asarray(transmat_prior)
-            if transmat_prior.shape != (self.n_components, self.n_components):
-                if transmat_prior.shape[0] == self.n_unique:
-                    transmat_prior = np.copy(
-                        self._ntied_transmat_prior(transmat_prior))
-                else:
-                    raise ValueError("cannot match shape of transmat")
-        self.transmat_prior = np.asarray(transmat_prior).copy()
+    def _set_transmat_prior(self, transmat_prior_val):
+        # new val needs be n_unique x n_unique
+        # or, alternatively n_components x n_components
+        # internally, n_components x n_components
+        # if n_unique x n_unique is passed, _ntied_transmat_prior is
+        # called to get n_components x n_components
+        transmat_prior_new = np.zeros((self.n_components, self.n_components))
+        if transmat_prior_val is not None:
+
+            if transmat_prior_val.shape == (self.n_unique, self.n_unique):
+                transmat_prior_new = \
+                np.copy(self._ntied_transmat_prior(transmat_prior_val))
+
+            elif transmat_prior_val.shape == \
+            (self.n_components, self.n_components):
+                tramsmat_prior_new = np.copy(transmat_prior_val)
+
+            else:
+                raise ValueError("cannot match shape of transmat_prior")
+
+
+        self.transmat_prior = transmat_prior_new
 
     transmat_prior_ = property(_get_transmat_prior, _set_transmat_prior)

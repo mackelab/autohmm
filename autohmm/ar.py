@@ -136,7 +136,7 @@ class ARTHMM(THMM):
     """
     def __init__(self, n_unique=2, n_lags=1, n_tied=0,
                  startprob_init=None, transmat_init=None, startprob_prior=1.0,
-                 transmat_prior=1.0, algorithm="viterbi", random_state=None,
+                 transmat_prior=None, algorithm="viterbi", random_state=None,
                  n_iter=25, n_iter_min=2, tol=1e-4,
                  params=string.ascii_letters,
                  init_params=string.ascii_letters, alpha_init=None,
