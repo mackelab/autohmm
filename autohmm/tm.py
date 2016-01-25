@@ -287,6 +287,7 @@ class THMM(_BaseAUTOHMM):
             self.startprob_ = np.where(self.startprob_ <= np.finfo(float).eps,
                                        self.startprob_, startprob_)
         if 't' in params:
+
             if self.n_tied == 0:
                 transmat_ = self.transmat_prior + stats['trans']
                 normalize(transmat_, axis=1)
@@ -295,31 +296,54 @@ class THMM(_BaseAUTOHMM):
             else:
                 transmat_ = np.zeros((self.n_components, self.n_components))
                 transitionCnts = stats['trans'] + self.transmat_prior
+                transition_index = [i * self.n_chain for i in range(self.n_unique)]
+
                 for b in range(self.n_unique):
-                    block = np.zeros((self.n_chain, self.n_components))
-                    block_trans = transitionCnts[range(b*self.n_chain,
-                                                (b+1)*self.n_chain), :]
-                    block_exit_idx = (np.repeat(self.n_chain-1,
-                                                self.n_unique-1),
-                                      [ix for ix in
-                                       range(0, self.n_unique*self.n_chain,
-                                             self.n_chain)
-                                       if ix != b*self.n_chain])
-                    block_chain_idx = (range(0, self.n_chain),
-                                       range(b*self.n_chain,
-                                             b*self.n_chain+self.n_chain))
-                    block_offchain_idx = (range(0, self.n_tied),
-                                          range(b*self.n_chain+1,
-                                                b*self.n_chain+self.n_chain))
-                    block[block_chain_idx] = block_trans[block_chain_idx]
-                    block[block_exit_idx] = block_trans[block_exit_idx]
-                    block_norm = block.sum()
-                    block_chain_sum = block[block_chain_idx].sum()
-                    block[block_chain_idx] = block_chain_sum
-                    block /= block_norm
-                    block[block_offchain_idx] = 1-block[block_chain_idx][0]
-                    transmat_[range(b*self.n_chain,
-                              (b+1)*self.n_chain), :] = block
+
+                    block = \
+                    transitionCnts[self.n_chain * b : self.n_chain * (b + 1)][:] + 0.
+
+                    denominator_diagonal = np.sum(block)
+                    diagonal = 0.0
+
+                    index_line = range(0, self.n_chain)
+                    index_row = range(self.n_chain * b, self.n_chain * (b + 1))
+
+                    for l, r in zip(index_line, index_row):
+                        diagonal += (block[l][r])
+
+                    for l, r in zip(index_line, index_row):
+                        block[l][r] = diagonal / denominator_diagonal
+
+                    self_transition = block[0][self.n_chain * b]
+                    denominator_off_diagonal = \
+                    (np.sum(block[self.n_chain-1])) - self_transition
+                    template = block[self.n_chain - 1] + 0.
+
+                    for entry in range(len(template)):
+                        template[entry] = (template[entry] * (1 - self_transition)) \
+                        / float(denominator_off_diagonal)
+
+                    template[(self.n_chain * (b + 1)) - 1] = 0.
+                    line_value = 1 - self_transition
+
+                    for entry in range(len(template)):
+                        line_value = line_value - template[entry]
+
+                    for index in transition_index:
+                        if index != (b * self.n_chain):
+                            block[self.n_chain - 1][index] = \
+                            line_value + template[index]
+
+                    line = range(self.n_chain - 1)
+                    row = [b * self.n_chain + i for i in range(1, self.n_chain)]
+
+                    for x, y in zip(line, row):
+                        block[x][y] = 1 - self_transition
+
+
+                    transmat_[self.n_chain * b : self.n_chain * (b + 1)][:] = block
+
                 self.transmat_ = np.copy(transmat_)
 
     def _process_inputs(self, X):
@@ -659,13 +683,14 @@ class THMM(_BaseAUTOHMM):
         return np.exp(self._log_startprob)
 
     def _set_startprob(self, startprob):
+
         if startprob is None:
             startprob = np.tile(1.0 / self.n_components, self.n_components)
         else:
             startprob = np.asarray(startprob, dtype=np.float)
 
             if not np.alltrue(startprob <= 1.0):
-                startprob = normalize(startprob)
+                normalize(startprob)
 
             if len(startprob) != self.n_components:
                 if len(startprob) == self.n_unique:
@@ -777,9 +802,7 @@ class THMM(_BaseAUTOHMM):
                                (self.n_components, self.n_components))
         else:
             transmat_val[np.isnan(transmat_val)] = 0.0
-
-            if not np.alltrue(transmat_val <= 1.0):
-                transmat_val = normalize(transmat_val, axis=1)
+            normalize(transmat_val, axis=1)
 
             if (np.asarray(transmat_val).shape == (self.n_components,
                                                    self.n_components)):

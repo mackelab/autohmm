@@ -11,7 +11,7 @@ from numpy.testing import assert_array_equal, assert_array_almost_equal
 from hmmlearn.utils import normalize
 
 from autohmm import tm
-
+import pdb
 np.seterr(all='warn')
 
 def test_precision_prior_wrong_nb():
@@ -38,13 +38,14 @@ class PlainGaussianHMM(TestCase):
     def setUp(self):
         self.prng = np.random.RandomState(42)
 
+        self.n_unique = 2
         self.n_components = 2
         self.startprob = np.array([0.6, 0.4])
         self.transmat = np.array([[0.7, 0.3], [0.4, 0.6]])
         self.mu = np.array([0.7, -2.0])
         self.var = np.array([0.2, 0.2])
 
-        self.h = tm.THMM(n_unique=self.n_components, random_state=self.prng)
+        self.h = tm.THMM(n_unique=self.n_unique, random_state=self.prng)
         self.h.startprob_ = self.startprob
         self.h.transmat_ = self.transmat
         self.h.mu_ = self.mu
@@ -58,9 +59,12 @@ class PlainGaussianHMM(TestCase):
         X, _state_sequence = h.sample(lengths, random_state=self.prng)
 
         # Perturb
-        h.startprob_ = normalize(self.prng.rand(self.n_components))
-        h.transmat_ = normalize(self.prng.rand(self.n_components,
-                                               self.n_components), axis=1)
+        pstarting = self.prng.rand(self.n_components)
+        normalize(pstarting)
+        h.startprob_ = pstarting
+        ptransmat = self.prng.rand(self.n_components, self.n_components)
+        normalize(ptransmat, axis=1)
+        h.transmat_ = ptransmat
 
         # TODO: Test more parameters, generate test cases
         trainll = fit_hmm_and_monitor_log_likelihood(
@@ -77,6 +81,68 @@ class PlainGaussianHMM(TestCase):
                                   self.var.reshape(-1), decimal=1)
         assert_array_almost_equal(h.transmat_.reshape(-1),
                                   self.transmat.reshape(-1), decimal=2)
+
+class TiedGaussianHMM(TestCase):
+    def setUp(self):
+        self.prng = np.random.RandomState(42)
+
+        self.n_unique = 2
+        self.n_components = 6
+        self.startprob = np.array([0.6, 0.4])
+        self.transmat = np.array([[0.7, 0.3], [0.4, 0.6]])
+
+        self.mu = np.array([0.7, -2.0])
+        self.var = np.array([0.2, 0.2])
+        self.h = tm.THMM(n_unique=self.n_unique, n_tied = 2, random_state=self.prng)
+        self.h.startprob_ = self.startprob
+        self.h.transmat_ = self.transmat
+        self.h.mu_ = self.mu
+        self.h.var_ = self.var
+
+    def test_fit(self, params='stpmaw', n_iter=50, **kwargs):
+        h = self.h
+        self.transmat = np.copy(h.transmat_)
+        h.params = params
+        lengths = 10000
+        X, _state_sequence = h.sample(lengths, random_state=self.prng)
+
+        # Perturb
+        pstarting = self.prng.rand(self.n_components)
+        normalize(pstarting)
+        h.startprob_ = pstarting
+
+        template = np.zeros((6,6))
+        noise = np.random.normal(3, 2, 12)
+        nb = 0
+        for row in range(5):
+            template[row][row] = noise[nb]
+            nb = nb + 1
+            template[row][row+1] = noise[nb]
+            nb = nb + 1
+        template[5][0] = noise[nb]
+        nb = nb + 1
+        template[5][5] = noise[nb]
+        template = abs(template)
+
+        h.transmat_ = np.copy(template)
+
+
+        # TODO: Test more parameters, generate test cases
+        trainll = fit_hmm_and_monitor_log_likelihood(
+            h, X, n_iter=n_iter)
+
+        # Check that the log-likelihood is always increasing during training.
+        #diff = np.diff(trainll)
+        #self.assertTrue(np.all(diff >= -1e-6),
+        #                "Decreasing log-likelihood: {0}" .format(diff))
+
+        assert_array_almost_equal(h.mu_.reshape(-1),
+                                  self.mu.reshape(-1), decimal=2)
+        assert_array_almost_equal(h.var_.reshape(-1),
+                                  self.var.reshape(-1), decimal=2)
+        assert_array_almost_equal(h.transmat_.reshape(-1),
+                                  self.transmat.reshape(-1), decimal=2)
+
 
 if __name__ == '__main__':
     unittest.main()
