@@ -11,7 +11,7 @@ from numpy.testing import assert_array_equal, assert_array_almost_equal
 from hmmlearn.utils import normalize
 
 from autohmm import tm
-import pdb
+
 np.seterr(all='warn')
 
 def test_precision_prior_wrong_nb():
@@ -23,6 +23,7 @@ def test_precision_prior_unique():
     m = tm.THMM(n_unique = 2, n_tied = 1)
     m.precision_prior_ = np.array([[0.7], [0.3]])
     correct_prior = np.array([0.7, 0.7, 0.3, 0.3])
+    correct_prior = correct_prior.reshape(4, 1, 1)
     assert_array_equal(m._precision_prior_, correct_prior)
 
 def fit_hmm_and_monitor_log_likelihood(h, X, n_iter=1):
@@ -81,6 +82,27 @@ class PlainGaussianHMM(TestCase):
                                   self.var.reshape(-1), decimal=1)
         assert_array_almost_equal(h.transmat_.reshape(-1),
                                   self.transmat.reshape(-1), decimal=2)
+
+class MultivariateGaussianHMM(TestCase):
+    def setUp(self):
+        self.prng = np.random.RandomState(42)
+        self.n_unique = 2
+        self.n_features = 3
+        self.n_components = 6
+        self.startprob = np.array([0.6, 0.4])
+        self.transmat = np.array([[0.7, 0.3], [0.4, 0.6]])
+
+        self.mu = np.array([[0.7, -2.0, 0.1],
+                            [-0.7, 2.0, -0,1]])
+
+        self.precision = np.array([[[599, 394], [800, 834]],
+                                    [[375, 353], [342, 353]]])
+
+        self.h = tm.THMM(n_unique=self.n_unique, n_tied = 2, random_state=self.prng)
+        self.h.startprob_ = self.startprob
+        self.h.transmat_ = self.transmat
+        self.h.mu_ = self.mu
+        self.h.precision_ = self.precision
 
 class TiedGaussianHMM(TestCase):
     def setUp(self):
