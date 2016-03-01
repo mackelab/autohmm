@@ -12,7 +12,7 @@ from hmmlearn import hmm
 from hmmlearn.utils import normalize
 
 from autohmm import ar
-
+import pdb
 from nose.plugins.skip import SkipTest
 
 np.seterr(all='warn')
@@ -66,6 +66,34 @@ def fit_hmm_and_monitor_log_likelihood(h, X, n_iter=1):
         loglikelihoods[i], _ = h.score_samples(X)
     return loglikelihoods
 
+class ARMultivariateGaussianHMM(TestCase):
+    def setUp(self):
+        self.prng = np.random.RandomState(14)  # TODO: remove fixed seeding
+
+        self.n_unique = 2
+        self.n_lags = 2
+        self.startprob = np.array([0.6, 0.4])
+        self.transmat = np.array([[0.8, 0.2], [0.1, 0.9]])  
+        self.var = np.array([0.1, 0.3])
+        self.alpha = np.array([0.8, 0.25])
+        self.shared_alpha = False
+        self.mu = np.array([[0.7, -2.0, 0.1],
+                            [-0.7, 2.0, -0,1]])
+
+        self.precision = np.array([[[599, 394], [800, 834]],
+                                    [[375, 353], [342, 353]]])
+
+        self.h = ar.ARTHMM(n_unique=self.n_unique, n_lags=self.n_lags,
+                            random_state=self.prng, n_features=3,
+                            shared_alpha=self.shared_alpha,
+                            verbose=False)
+        self.h.precision_ = self.precision
+        self.h.startprob_ = self.startprob
+        self.h.transmat_ = self.transmat
+        self.h.mu_ = self.mu
+        self.h.var_ = self.var
+        self.h.alpha_ = self.alpha
+
 class ARGaussianHMM(TestCase):
     def setUp(self):
         self.prng = np.random.RandomState(14)  # TODO: remove fixed seeding
@@ -95,6 +123,7 @@ class ARGaussianHMM(TestCase):
         h.params = params
 
         lengths = 5000
+
         X, true_state_sequence = h.sample(lengths, random_state=self.prng)
 
         # perturb parameters
@@ -124,6 +153,8 @@ class ARGaussianHMM(TestCase):
         # TODO: add test for decoding
         #logprob, decoded_state_sequence = h.decode(X)
         #assert_array_equal(true_state_sequence, decoded_state_sequence)
+
+
 
 if __name__ == '__main__':
     unittest.main()

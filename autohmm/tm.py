@@ -40,6 +40,9 @@ class THMM(_BaseAUTOHMM):
     n_tied : int
         Number of tied states for each component.
 
+    n_features: int
+        Number of features.
+
     algorithm : string
         Decoding algorithm.
 
@@ -63,22 +66,22 @@ class THMM(_BaseAUTOHMM):
     transmat_prior : array, shape (``n_unique``, ``n_unique``)
         Pseudo-observations (counts).
 
-    mu_init : array, shape (``n_unique``)
+    mu_init : array, shape (``n_unique``, ``n_features``)
         Initial mean parameters for each state.
 
     mu_weight : int
         Weight of mu prior, shared across components.
 
-    mu_prior : array, shape (``n_unique``)
+    mu_prior : array, shape (``n_unique``, ``n_features``)
         Prior on mu.
 
-    precision_init : array, shape (``n_unique``)
+    precision_init : array, shape (``n_unique``, ``n_features``, ``n_features``)
         Initial precision (inverse variance) parameters for each state.
 
     precision_weight : int
         Weight of precision (inverse variance) prior.
 
-    precision_prior : array, shape (``n_unique``)
+    precision_prior : array, shape (``n_unique``, ``n_features``, ``n_features``)
         Prior on precision (inverse variance).
 
     tol : float
@@ -112,13 +115,13 @@ class THMM(_BaseAUTOHMM):
 
     mu_ : array, shape (``n_unique``, ``n_features``)
 
-    precision_ : array, shape (``n_unique``, ``n_features``)
+    precision_ : array, shape (``n_unique``, ``n_features``, ``n_features``)
 
     transmat_ :  array, shape (``n_unique``, ``n_unique``)
 
     startprob_ :  array, shape (``n_unique``, ``n_unique``)
     """
-    def __init__(self, n_unique=2, n_tied=0,
+    def __init__(self, n_unique=2, n_tied=0, n_features=1,
                  algorithm="viterbi",
                  params=string.ascii_letters, init_params=string.ascii_letters,
                  startprob_init=None, startprob_prior=1.0,
@@ -139,7 +142,7 @@ class THMM(_BaseAUTOHMM):
         self.n_chain = n_tied+1
         self.n_unique = n_unique
         self.n_components = n_unique * self.n_chain
-        self.n_features = 1  # only univariate observations implemented
+        self.n_features = n_features
 
         self.mu_bounds = mu_bounds
         self.precision_bounds = precision_bounds
@@ -178,6 +181,8 @@ class THMM(_BaseAUTOHMM):
         p : n_unique x n_features
         xn: N x n_features
         """
+
+
         res = -0.5*np.log(2*np.pi) + 0.5*np.log(p.T) - \
                0.5*p.T*(xn-m.T)**2  # N x n_unique
         return res
@@ -269,15 +274,15 @@ class THMM(_BaseAUTOHMM):
         if 'm' in params:
             mu_init = np.zeros((self.n_unique, self.n_features))
             for u in range(self.n_unique):
-                for t in range(self.n_chain):
-                    mu_init[u] = kmeans[u, 0]
+                for f in range(self.n_features):
+                    mu_init[u][f] = kmeans[u, f]
             self.mu_ = np.copy(mu_init)
 
         if 'p' in params:
-            precision_init = np.zeros((self.n_unique, self.n_features))
+            precision_init = np.zeros((self.n_unique, self.n_features, self.n_features))
+            transpose_X = np.transpose(X)
             for u in range(self.n_unique):
-                for t in range(self.n_chain):
-                    precision_init[u] = 1.0 / np.var(X[kmmod.labels_ == u])
+                precision_init[u] = 1.0 / np.cov(transpose_X[kmmod.labels_ == u])
             self.precision_ = np.copy(precision_init)
 
     def _do_mstep(self, stats, params):  # M-Step for startprob and transmat
@@ -348,8 +353,11 @@ class THMM(_BaseAUTOHMM):
 
     def _process_inputs(self, X):
         # Makes sure inputs have correct shape
-        return {'obs': X.reshape(-1,1)}
+        if self.n_features == 1:
+            return {'obs': X.reshape(-1,1)}
 
+        else:
+            return {'obs': X}
     def _process_sequence(self, state_sequence):
         """Reduces a state sequence (for tied states), if requested.
 
@@ -552,11 +560,12 @@ class THMM(_BaseAUTOHMM):
             return self._mu_[[u*(self.n_chain) for u in range(self.n_unique)]]
 
     def _set_mu(self, mu_val):
-        # new val needs to have a 1st dim of length n_unique, n_features
-        # internally, n_components x 1
+        # new val needs to be of shape (n_uniqe, n_features)
+        # internally, (n_components x n_features)
         mu_new = np.zeros((self.n_components, self.n_features))
         if mu_val is not None:
-            if len(mu_val) == self.n_unique:
+            mu_val = mu_val.reshape(self.n_unique, self.n_features)
+            if mu_val.shape == (self.n_unique, self.n_features):
                 for u in range(self.n_unique):
                     for t in range(self.n_chain):
                         mu_new[u*(self.n_chain)+t] = mu_val[u].copy()
@@ -586,10 +595,11 @@ class THMM(_BaseAUTOHMM):
 
     def _set_mu_prior(self, mu_prior):
         if mu_prior is None:
-            self._mu_prior_ = np.zeros(self.n_components)
+            self._mu_prior_ = np.zeros((self.n_components, self.n_features))
         else:
             mu_prior = np.asarray(mu_prior)
-            if len(mu_prior) == self.n_unique:
+            mu_prior = mu_prior.reshape(self.n_unique, self.n_features)
+            if mu_prior.shape == (self.n_unique, self.n_features):
                 self._mu_prior_ = mu_prior.copy()
             else:
                 raise ValueError("cannot match shape of mu_prior")
@@ -604,11 +614,15 @@ class THMM(_BaseAUTOHMM):
                 [u*(self.n_chain) for u in range(self.n_unique)]]
 
     def _set_precision(self, precision_val):
-        # new val needs to have a 1st dim of length n_unique, n_features
+        # new val needs to have dimension (n_unique, n_features, n_features)
         # internally, n_components x 1
-        precision_new = np.zeros((self.n_components, self.n_features))
+        precision_new = \
+        np.zeros((self.n_components, self.n_features, self.n_features))
         if precision_val is not None:
-            if len(precision_val) == self.n_unique:
+            precision_val = \
+            precision_val.reshape(self.n_unique, self.n_features, self.n_features)
+            if precision_val.shape == \
+            (self.n_unique, self.n_features, self.n_features):
                 for u in range(self.n_unique):
                     for t in range(self.n_chain):
                         precision_new[u*(self.n_chain)+t] = precision_val[u].copy()
@@ -638,14 +652,18 @@ class THMM(_BaseAUTOHMM):
 
     def _set_precision_prior(self, precision_prior):
         if precision_prior is None:
-            self._precision_prior_ = np.zeros(self.n_components)
+            self._precision_prior_ = \
+            np.zeros((self.n_components, self.n_features, self.n_features))
         else:
             precision_prior = np.asarray(precision_prior)
             if len(precision_prior) == 1:
                 self._precision_prior_ = np.tile(precision_prior,
-                                                 self.n_components)
-            elif len(precision_prior) == self.n_unique:
-                self._precision_prior_ = np.zeros(self.n_components)
+                (self.n_components, self.n_features, self.n_features))
+            elif \
+            (precision_prior.reshape(self.n_unique, self.n_features, self.n_features)).shape \
+            == (self.n_unique, self.n_features, self.n_features):
+                self._precision_prior_ = \
+                np.zeros((self.n_components, self.n_features, self.n_features))
                 for u in range(self.n_unique):
                     for t in range(self.n_chain):
                         self._precision_prior_[u*(self.n_chain)+t] = precision_prior[u].copy()
@@ -826,9 +844,8 @@ class THMM(_BaseAUTOHMM):
 
     def _set_transmat_prior(self, transmat_prior_val):
         # new val needs be n_unique x n_unique
-        # or, alternatively n_components x n_components
         # internally, n_components x n_components
-        # if n_unique x n_unique is passed, _ntied_transmat_prior is
+        # _ntied_transmat_prior is
         # called to get n_components x n_components
         transmat_prior_new = np.zeros((self.n_components, self.n_components))
         if transmat_prior_val is not None:
@@ -836,10 +853,6 @@ class THMM(_BaseAUTOHMM):
             if transmat_prior_val.shape == (self.n_unique, self.n_unique):
                 transmat_prior_new = \
                 np.copy(self._ntied_transmat_prior(transmat_prior_val))
-
-            elif transmat_prior_val.shape == \
-            (self.n_components, self.n_components):
-                tramsmat_prior_new = np.copy(transmat_prior_val)
 
             else:
                 raise ValueError("cannot match shape of transmat_prior")

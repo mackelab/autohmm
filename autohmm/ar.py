@@ -38,6 +38,9 @@ class ARTHMM(THMM):
     n_tied : int
         Number of tied states for each component.
 
+    n_features : int
+        Number of features.
+
     algorithm : string
         Decoding algorithm.
 
@@ -61,22 +64,22 @@ class ARTHMM(THMM):
     transmat_prior : array, shape (``n_unique``, ``n_unique``)
         Pseudo-observations (counts).
 
-    mu_init : array, shape (``n_unique``)
+    mu_init : array, shape (``n_unique``, ``n_features``)
         Initial mean parameters for each state.
 
     mu_weight : int
         Weight of mu prior, shared across components.
 
-    mu_prior : array, shape (``n_unique``)
+    mu_prior : array, shape (``n_unique``, ``n_features``)
         Prior on mu.
 
-    precision_init : array, shape (``n_unique``)
+    precision_init : array, shape (``n_unique``, ``n_features``, ``n_features``)
         Initial precision (inverse variance) parameters for each state.
 
     precision_weight : int
         Weight of precision (inverse variance) prior.
 
-    precision_prior : array, shape (``n_unique``)
+    precision_prior : array, shape (``n_unique``, ``n_features``, ``n_features``)
         Prior on precision (inverse variance).
 
     tol : float
@@ -122,7 +125,7 @@ class ARTHMM(THMM):
 
     mu_ : array, shape (``n_unique``, ``n_features``)
 
-    precision_ : array, shape (``n_unique``, ``n_features``)
+    precision_ : array, shape (``n_unique``, ``n_features``, ``n_features``)
 
     transmat_ :  array, shape (``n_unique``, ``n_unique``)
 
@@ -134,7 +137,7 @@ class ARTHMM(THMM):
 
     alpha_ : array, shape (``n_components``, ``n_lags``)
     """
-    def __init__(self, n_unique=2, n_lags=1, n_tied=0,
+    def __init__(self, n_unique=2, n_lags=1, n_tied=0, n_features=1,
                  startprob_init=None, transmat_init=None, startprob_prior=1.0,
                  transmat_prior=None, algorithm="viterbi", random_state=None,
                  n_iter=25, n_iter_min=2, tol=1e-4,
@@ -148,6 +151,7 @@ class ARTHMM(THMM):
                  precision_bounds=np.array([0.001, 10000.0]),
                  alpha_bounds=np.array([-10.0, 10.0])):
         super(ARTHMM, self).__init__(n_unique=n_unique, n_tied=n_tied,
+                                     n_features=n_features,
                                      algorithm=algorithm,
                                      params=params, init_params=init_params,
                                      startprob_init=startprob_init,
@@ -349,7 +353,7 @@ class ARTHMM(THMM):
         """Estimate model parameters.
 
         An initialization step is performed before entering the
-        EM-algorithm. If you want to avoid this step for a subset of
+        EM-algorithm. If you want to avoid this step for a sub of
         the parameters, pass proper ``init_params`` keyword argument
         to estimator's constructor.
 
@@ -472,6 +476,7 @@ class ARTHMM(THMM):
 
         if self.n_lags > 0:
             if init_samples is None:
+                """
                 n_init_samples = order + 10
                 noise = np.sqrt(1.0/self._precision_[start_state]) * \
                         random_state.randn(n_init_samples)
@@ -485,7 +490,8 @@ class ARTHMM(THMM):
                 A = toeplitz(col, row)
                 init_samples = np.dot(pinv(A), noise + self._mu_[start_state])
                 # TODO: fix bug with n_lags > 1, blows up
-                init_samples = 0.01*np.ones((len(init_samples)))  # temporary fix
+                """
+                init_samples = 0.01*np.ones((self.n_lags, self.n_features))  # temporary fix
 
         if observed_states is None:
             transmat_pdf = np.exp(np.copy(self._log_transmat))
@@ -506,7 +512,7 @@ class ARTHMM(THMM):
 
         precision = np.copy(self._precision_)
         for idx in range(n_samples):
-            state_ = states[idx]
+            state_ = int(states[idx])
             var_ = np.sqrt(1/precision[state_])
 
             if self.n_lags == 0:
