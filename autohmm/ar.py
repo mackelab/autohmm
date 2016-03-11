@@ -173,8 +173,8 @@ class ARTHMM(THMM):
         if self.n_lags < 1:
             raise ValueError("n_lags needs to be greater than 0")
 
-        self.alpha_ = alpha_init
         self.shared_alpha = shared_alpha
+        self.alpha_ = alpha_init
         self.alpha_bounds = alpha_bounds
 
         self.wrt.extend(['a'])
