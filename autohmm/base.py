@@ -73,9 +73,6 @@ class _BaseAUTOHMM(_BaseHMM):
         return (self._obj(**values).reshape(-1),
                 self._obj_grad(**values).reshape(-1))
 
-    # hmmlearn implements _do_viterbi_pass, _do_forward_pass,
-    # _do_backward_pass, _compute_posteriors, _accumulate_sufficient_statistics
-
     def _do_score_samples(self, data, lengths=None):  # adapted hmmlearn
         # TODO: Support lengths arguement
         framelogprob = self._compute_log_likelihood(data)
@@ -157,6 +154,7 @@ class _BaseAUTOHMM(_BaseHMM):
                         framelogprob, bwdlattice)
         return bwdlattice
 
+
     def _accumulate_sufficient_statistics(self, stats, X, framelogprob,
                                           posteriors, fwdlattice, bwdlattice):
         """Updates sufficient statistics from a given sample.
@@ -175,6 +173,7 @@ class _BaseAUTOHMM(_BaseHMM):
         fwdlattice, bwdlattice : array, shape (n_samples, n_components)
             Log-forward and log-backward probabilities.
         """
+
         # Based on hmmlearn's _BaseHMM
         safe_transmat = self.transmat_ + np.finfo(float).eps
         stats['nobs'] += 1
@@ -191,6 +190,7 @@ class _BaseAUTOHMM(_BaseHMM):
             _hmmc._compute_lneta(n_samples, n_components, fwdlattice,
                                  np.log(safe_transmat),
                                  bwdlattice, framelogprob, lneta)
+
             stats['trans'] += np.exp(logsumexp(lneta, axis=0))
             # stats['trans'] = np.round(stats['trans'])
             # if np.sum(stats['trans']) != X.shape[0]-1:

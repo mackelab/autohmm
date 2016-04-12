@@ -5,7 +5,7 @@ import warnings
 
 from scipy import linalg
 from scipy import stats
-from scipy.stats import norm
+from scipy.stats import norm, multivariate_normal
 import scipy.sparse as sp
 
 from sklearn import cluster
@@ -131,8 +131,8 @@ class THMM(_BaseAUTOHMM):
                  precision_prior=None, tol=1e-4,
                  n_iter=25, n_iter_min=2, n_iter_update=1,
                  random_state=None, verbose=False,
-                 mu_bounds=np.array([-50.0, 50.0]),
-                 precision_bounds=np.array([0.001, 10000.0])):
+                 mu_bounds=np.array([-1e5, 1e5]),
+                 precision_bounds=np.array([-1e5, 1e5])):
         super(THMM, self).__init__(algorithm=algorithm, params=params,
                                    init_params=init_params, tol=tol,
                                    n_iter=n_iter, n_iter_min=n_iter_min,
@@ -162,15 +162,14 @@ class THMM(_BaseAUTOHMM):
 
         self.wrt.extend(['m', 'p'])
         self.wrt_dims.update({'m': (self.n_unique, self.n_features)})
-        self.wrt_dims.update({'p': (self.n_unique, self.n_features)})
+        self.wrt_dims.update({'p': (self.n_unique, self.n_features, self.n_features)})
         self.wrt_bounds.update({'m': (self.mu_bounds[0], self.mu_bounds[1])})
         self.wrt_bounds.update({'p': (self.precision_bounds[0],
                                       self.precision_bounds[1])})
 
     def _compute_log_likelihood(self, data, from_=0, to_=-1):
         ll = self._ll(self.mu_, self.precision_, data['obs'][from_:to_])
-        rep = self.n_chain
-        return np.repeat(ll, rep).reshape(-1, self.n_unique*rep)
+        return ll
 
     def _ll(self, m, p, xn, **kwargs):
         """Computation of log likelihood
@@ -178,14 +177,22 @@ class THMM(_BaseAUTOHMM):
         Dimensions
         ----------
         m : n_unique x n_features
-        p : n_unique x n_features
+        p : n_unique x n_features x n_features
         xn: N x n_features
         """
 
+        samples = xn.shape[0]
+        xn = xn.reshape(samples, 1, self.n_features)
+        m = m.reshape(1, self.n_unique, self.n_features)
 
-        res = -0.5*np.log(2*np.pi) + 0.5*np.log(p.T) - \
-               0.5*p.T*(xn-m.T)**2  # N x n_unique
-        return res
+        det = np.linalg.det(np.linalg.inv(p))
+        det = det.reshape(1, self.n_unique)
+
+        tem = np.einsum('NUF,UFX,NUX->NU', (xn - m), p, (xn - m))
+
+        res = (-self.n_features/2.0)*np.log(2*np.pi) - 0.5*tem - 0.5*np.log(det)
+
+        return res  # N x n_unique
 
     def _obj(self, m, p, xn, gn, **kwargs):
         ll = self._ll(m, p, xn)
@@ -194,17 +201,20 @@ class THMM(_BaseAUTOHMM):
         mp = self.mu_prior_
         pw = self.precision_weight_
         pp = self.precision_prior_
+        m = m.reshape(self.n_unique, self.n_features, 1)
+        mp = mp.reshape(self.n_unique, self.n_features, 1)
         prior = (pw-0.5) * np.log(p) - 0.5*p*(mw*(m-mp)**2 + 2*pp)
 
-        res = -1*(np.sum(gn * ll) + np.sum(prior))
-        return res
+        res = -1*(np.sum(gn * ll) ) + np.sum(prior)
+        return res  # scalar
 
     def _obj_grad(self, wrt, m, p, xn, gn, **kwargs):
+        m = m.reshape(self.n_unique, self.n_features, 1)
         res = grad(self._obj, wrt)(m, p, xn, gn)
         res = np.array([res])
-        return res
+        return res  # scalar
 
-    def _do_mstep_grad(self, puc, data):
+    def _do_mstep_grad(self, gn, data):
         wrt = [str(p) for p in self.wrt if str(p) in self.params]
         for update_idx in range(self.n_iter_update):
             for p in wrt:
@@ -226,11 +236,10 @@ class THMM(_BaseAUTOHMM):
                                          'p': self.precision_,
                                          'm': self.mu_,
                                          'xn': data['obs'],
-                                         'gn': puc  # post. uni. concat.
+                                         'gn': gn  # post. uni. concat.
                                         }),
                                   bounds=optim_bounds,
                                   method='TNC')
-
                 newv = result.x.reshape(self.wrt_dims[p])
                 if p == 'm':
                     self.mu_ = newv
@@ -280,9 +289,11 @@ class THMM(_BaseAUTOHMM):
 
         if 'p' in params:
             precision_init = np.zeros((self.n_unique, self.n_features, self.n_features))
-            transpose_X = np.transpose(X)
             for u in range(self.n_unique):
-                precision_init[u] = 1.0 / np.cov(transpose_X[kmmod.labels_ == u])
+                if self.n_features == 1:
+                    precision_init[u] = 1.0 / np.cov(transpose_X[kmmod.labels_ == u])
+                else:
+                    precision_init[u] = np.linalg.inv(np.cov(np.transpose(X[kmmod.labels_ == u])))
             self.precision_ = np.copy(precision_init)
 
     def _do_mstep(self, stats, params):  # M-Step for startprob and transmat
@@ -304,7 +315,6 @@ class THMM(_BaseAUTOHMM):
                 transition_index = [i * self.n_chain for i in range(self.n_unique)]
 
                 for b in range(self.n_unique):
-
                     block = \
                     transitionCnts[self.n_chain * b : self.n_chain * (b + 1)][:] + 0.
 
@@ -346,18 +356,15 @@ class THMM(_BaseAUTOHMM):
                     for x, y in zip(line, row):
                         block[x][y] = 1 - self_transition
 
-
                     transmat_[self.n_chain * b : self.n_chain * (b + 1)][:] = block
-
                 self.transmat_ = np.copy(transmat_)
 
     def _process_inputs(self, X):
-        # Makes sure inputs have correct shape
         if self.n_features == 1:
             return {'obs': X.reshape(-1,1)}
-
         else:
             return {'obs': X}
+
     def _process_sequence(self, state_sequence):
         """Reduces a state sequence (for tied states), if requested.
 
@@ -394,7 +401,7 @@ class THMM(_BaseAUTOHMM):
 
         Parameters
         ----------
-        X : array-like, shape (n_samples, 1)
+        X : array-like, shape (n_samples, n_features)
             Feature matrix of individual samples.
 
         lengths : array-like of integers, shape (n_sequences, )
@@ -418,35 +425,41 @@ class THMM(_BaseAUTOHMM):
                                            self.n_iter_min, self.verbose)
         for iter in range(self.n_iter):
             stats = self._initialize_sufficient_statistics()
-            puc = np.zeros((X.shape[0], self.n_unique))  # posteriors unique
-                                                         # concatenated
+            gn = np.zeros((X.shape[0], self.n_unique))
+
             curr_logprob = 0
             for i, j in iter_from_X_lengths(X, lengths):
-                framelogprob = self._compute_log_likelihood(data, from_=i,
-                                                            to_=j)
-                logprob, fwdlattice = self._do_forward_pass(framelogprob)
+
+                flp = self._compute_log_likelihood(data, from_=i, to_=j) # n_samples, n_unique
+                flp_rep = np.zeros((flp.shape[0], self.n_components))
+                for u in range(self.n_unique):
+                    for c in range(self.n_chain):
+                        flp_rep[:, u*self.n_chain+c] = flp[:, u]
+
+                # n_samples, n_components below
+                logprob, fwdlattice = self._do_forward_pass(flp_rep)
                 curr_logprob += logprob
-                bwdlattice = self._do_backward_pass(framelogprob)
+                bwdlattice = self._do_backward_pass(flp_rep)
                 posteriors = self._compute_posteriors(fwdlattice, bwdlattice)
                 self._accumulate_sufficient_statistics(
-                    stats, X[i:j], framelogprob, posteriors, fwdlattice,
-                    bwdlattice)
-                if self.n_tied > 0:
+                    stats, X[i:j], flp_rep, posteriors, fwdlattice, bwdlattice)
+
+                # sum responsibilities across chain if tied states exist
+                if self.n_tied == 0:
+                    gn[i:j, :] = posteriors
+                elif self.n_tied > 0:
                     for u in range(self.n_unique):
                         cols = range(u*(self.n_chain),
                                      u*(self.n_chain)+(self.n_chain))
-                        puc[i:j, u] = np.sum(posteriors[:, cols], axis=1)
-                else:
-                    puc[i:j, :] = posteriors
+                        gn[i:j, u] = (np.sum(posteriors[:, cols], axis=1)).reshape(X.shape[0])
 
             self.monitor_.report(curr_logprob)
             if self.monitor_.converged:
                 break
 
             self._do_mstep(stats, self.params)
-            self._do_mstep_grad(puc, data)  # not working with sufficient
-                                            # statistics, to have a more
-                                            # general framework
+            self._do_mstep_grad(gn, data)
+
         return self
 
     def sample(self, n_samples=2000, observed_states=None, random_state=None):
@@ -466,18 +479,19 @@ class THMM(_BaseAUTOHMM):
 
         Returns
         -------
-        samples : array_like, length (``n_samples``)
+        samples : array_like, length (``n_samples``, ``n_features``)
                   List of samples
 
         states : array_like, shape (``n_samples``)
                  List of hidden states (accounting for tied states by giving
                  them the same index)
         """
+
         if random_state is None:
             random_state = self.random_state
         random_state = check_random_state(random_state)
 
-        samples = np.zeros(n_samples)
+        samples = np.zeros((n_samples, self.n_features))
         states = np.zeros(n_samples)
 
         if observed_states is None:
@@ -493,18 +507,20 @@ class THMM(_BaseAUTOHMM):
 
             nrand = random_state.rand(n_samples)
             for idx in range(1,n_samples):
-                newstate = (transmat_cdf[states[idx-1]] > nrand[idx-1]).argmax()
+                newstate = (transmat_cdf[int(states[idx-1])] > nrand[idx-1]).argmax()
                 states[idx] = newstate
+
         else:
             states = observed_states
 
         mu = np.copy(self._mu_)
         precision = np.copy(self._precision_)
         for idx in range(n_samples):
-            mean_ = self._mu_[states[idx]]
-            var_ = np.sqrt(1/precision[states[idx]])
-            samples[idx] = norm.rvs(loc=mean_, scale=var_, size=1,
-                                    random_state=random_state)
+            mean_ = mu[states[idx]]
+
+            covar_ = np.linalg.inv(precision[states[idx]])
+            samples[idx] = multivariate_normal.rvs(mean=mean_, cov=covar_)
+                                                  # random_state=random_state)
         states = self._process_sequence(states)
         return samples, states
 
@@ -600,7 +616,10 @@ class THMM(_BaseAUTOHMM):
             mu_prior = np.asarray(mu_prior)
             mu_prior = mu_prior.reshape(self.n_unique, self.n_features)
             if mu_prior.shape == (self.n_unique, self.n_features):
-                self._mu_prior_ = mu_prior.copy()
+                for u in range(self.n_unique):
+                    for t in range(self.n_chain):
+                        self._mu_prior[u*(self.n_chain)+t] = mu_prior[u].copy()
+
             else:
                 raise ValueError("cannot match shape of mu_prior")
 
@@ -673,10 +692,16 @@ class THMM(_BaseAUTOHMM):
     precision_prior_ = property(_get_precision_prior, _set_precision_prior)
 
     def _get_var(self):
-        return 1.0 / self._get_precision()
+        if self.n_features == 1:
+            return 1.0 / self._get_precision()
+        else:
+            return np.linalg.inv(self._get_precision())
 
     def _set_var(self, var_val):
-        return self._set_precision(1.0 / var_val)
+        if self.n_features == 1:
+            return self._set_precision(1.0 / var_val)
+        else:
+            return self._set_precision(np.linalg.inv(var_val))
 
     var_ = property(_get_var, _set_var)
 
@@ -689,19 +714,24 @@ class THMM(_BaseAUTOHMM):
     var_weight_ = property(_get_var_weight, _set_var_weight)
 
     def _get_var_prior(self):
-        return 1.0 / self._get_precision_prior()
+        if self.n_features == 1:
+            return 1.0 / self._get_precision_prior()
+        else:
+            return np.linalg.inv(self._get_precision_prior())
 
     def _set_var_prior(self, var_prior):
         var_prior = np.asarray(var_prior)
-        self._set_precision_prior(1.0 / var_prior)
+        if self.n_features == 1:
+            self._set_precision_prior(1.0 / var_prior)
+        else:
+            self._set_precision_prior(np.linalg.inv(var_prior))
 
     var_prior_ = property(_get_var_prior, _set_var_prior)
 
-    def _get_startprob(self):
+    def _get_startprob(self):  # TODO: decide upon shape
         return np.exp(self._log_startprob)
 
     def _set_startprob(self, startprob):
-
         if startprob is None:
             startprob = np.tile(1.0 / self.n_components, self.n_components)
         else:
@@ -754,29 +784,26 @@ class THMM(_BaseAUTOHMM):
     startprob_prior_ = property(_get_startprob_prior, _set_startprob_prior)
 
     def _ntied_transmat(self, transmat_val):  # TODO: document choices
-
-#                        +-----------------+
-#                        |a|1|0|0|0|0|0|0|0|
-#                        +-----------------+
-#                        |0|a|1|0|0|0|0|0|0|
-#                        +-----------------+
-#   +---+---+---+        |0|0|a|b|0|0|c|0|0|
-#   | a | b | c |        +-----------------+
-#   +-----------+        |0|0|0|e|1|0|0|0|0|
-#   | d | e | f | +----> +-----------------+
-#   +-----------+        |0|0|0|0|e|1|0|0|0|
-#   | g | h | i |        +-----------------+
-#   +---+---+---+        |d|0|0|0|0|e|f|0|0|
-#                        +-----------------+
-#                        |0|0|0|0|0|0|i|1|0|
-#                        +-----------------+
-#                        |0|0|0|0|0|0|0|i|1|
-#                        +-----------------+
-#                        |g|0|0|h|0|0|0|0|i|
-#                        +-----------------+
-# for a model with n_unique = 3 and n_tied = 2
-
-
+        #                        +-----------------+
+        #                        |a|1|0|0|0|0|0|0|0|
+        #                        +-----------------+
+        #                        |0|a|1|0|0|0|0|0|0|
+        #                        +-----------------+
+        #   +---+---+---+        |0|0|a|b|0|0|c|0|0|
+        #   | a | b | c |        +-----------------+
+        #   +-----------+        |0|0|0|e|1|0|0|0|0|
+        #   | d | e | f | +----> +-----------------+
+        #   +-----------+        |0|0|0|0|e|1|0|0|0|
+        #   | g | h | i |        +-----------------+
+        #   +---+---+---+        |d|0|0|0|0|e|f|0|0|
+        #                        +-----------------+
+        #                        |0|0|0|0|0|0|i|1|0|
+        #                        +-----------------+
+        #                        |0|0|0|0|0|0|0|i|1|
+        #                        +-----------------+
+        #                        |g|0|0|h|0|0|0|0|i|
+        #                        +-----------------+
+        # for a model with n_unique = 3 and n_tied = 2
         transmat = np.empty((0, self.n_components))
         for r in range(self.n_unique):
             row = np.empty((self.n_chain, 0))
@@ -811,7 +838,7 @@ class THMM(_BaseAUTOHMM):
             transmat = np.vstack((transmat, row))
         return transmat
 
-    def _get_transmat(self):
+    def _get_transmat(self):  # TODO: decide upon shape
         return np.exp(self._log_transmat)
 
     def _set_transmat(self, transmat_val):
