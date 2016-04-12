@@ -147,9 +147,9 @@ class ARTHMM(THMM):
                  precision_prior=None, precision_weight=0.0, mu_prior=None,
                  mu_weight=0.0, shared_alpha=True,
                  n_iter_update=1, verbose=False,
-                 mu_bounds=np.array([-50.0, 50.0]),
-                 precision_bounds=np.array([0.001, 10000.0]),
-                 alpha_bounds=np.array([-10.0, 10.0])):
+                 mu_bounds=np.array([-1.0e5, 1.0e5]),
+                 precision_bounds=np.array([-1.0e5, 1.0e5]),
+                 alpha_bounds=np.array([-1.0e5, 1.0e5])):
         super(ARTHMM, self).__init__(n_unique=n_unique, n_tied=n_tied,
                                      n_features=n_features,
                                      algorithm=algorithm,
@@ -189,8 +189,7 @@ class ARTHMM(THMM):
         ll = self._ll(self.mu_, self.precision_, self.alpha_,
                       data['obs'][from_:to_],
                       data['lagged'][from_:to_])
-        rep = self.n_chain
-        return np.repeat(ll, rep).reshape(-1, self.n_unique*rep)
+        return ll
 
     def _ll(self, m, p, a, xn, xln, **kwargs):
         """Computation of log likelihood
@@ -198,14 +197,25 @@ class ARTHMM(THMM):
         Dimensions
         ----------
         m :  n_unique x n_features
-        p :  n_unique x n_features
+        p :  n_unique x n_features x n_features
         a :  n_unique x n_lags (shared_alpha=F)
              OR     1 x n_lags (shared_alpha=T)
         xn:  N x n_features
-        xln: N x n_lags
+        xln: N x n_features x n_lags
         """
-        res = -0.5*np.log(2*np.pi) + 0.5*np.log(p.T) - \
-               0.5*p.T*(xn-(np.dot(xln, a.T) + m.T))**2  # N x n_unique
+
+        n_samples = xn.shape[0]
+        xn = xn.reshape(n_samples, self.n_features, 1)
+        m = m.reshape(1, self.n_features, self.n_unique)
+
+        det = np.linalg.det(np.linalg.inv(p))
+        det = det.reshape(1, self.n_unique)
+
+        xm = xn-(np.dot(xln, a.T) + m)
+        tem = np.einsum('NFU,UFX,NXU->NU', xm, p, xm)
+
+        res = (-self.n_features/2.0)*np.log(2*np.pi) - 0.5*tem - 0.5*np.log(det)
+
         return res
 
     def _obj(self, m, p, a, xn, xln, gn, **kwargs):
@@ -279,7 +289,7 @@ class ARTHMM(THMM):
             if 't' in params:
                 super(ARTHMM, self)._init_params(data, lengths, 't')
 
-            if 'm' in params or 'a' in params or 'p' in params:
+            if 'm' in params or 'a' in params or 'p' in params:  # TODO: init for n_features > 1
                 kmmod = cluster.KMeans(
                     n_clusters=self.n_unique,
                     random_state=self.random_state).fit(X)
@@ -302,7 +312,7 @@ class ARTHMM(THMM):
                     ar_alpha.append(ar_mod[0].params[1:])
                     ar_resid.append(ar_mod[0].resid)
 
-            if 'm' in params:
+            if 'm' in params:  # TODO: init for n_features > 1
                 mu_init = np.zeros((self.n_unique, self.n_features))
                 for u in range(self.n_unique):
                     ar_idx = u
@@ -313,7 +323,7 @@ class ARTHMM(THMM):
                             ar_alpha[ar_idx])
                 self.mu_ = np.copy(mu_init)
 
-            if 'p' in params:
+            if 'p' in params:  # TODO: init for n_features > 1
                 precision_init = np.zeros((self.n_unique, self.n_features))
                 for u in range(self.n_unique):
                     if not self.shared_alpha:
@@ -324,7 +334,7 @@ class ARTHMM(THMM):
                     precision_init[u] = 1.0 / maxVar
                 self.precision_ = np.copy(precision_init)
 
-            if 'a' in params:
+            if 'a' in params:  # TODO: init for n_features > 1
                 alpha_init = np.zeros((self.n_unique, self.n_lags))
                 for u in range(self.n_unique):
                     ar_idx = u
@@ -334,20 +344,24 @@ class ARTHMM(THMM):
                 self.alpha_ = alpha_init
 
     def _process_inputs(self, X, E=None, lengths=None):
-        # Makes sure inputs have correct shape, generates features
-        lagged = None
-        if lengths is None:
-            lagged = lagmat(X, maxlag=self.n_lags, trim='forward',
-                            original='ex')
-        else:
-            lagged = np.zeros((len(X), self.n_lags))
-            for i, j in iter_from_X_lengths(X, lengths):
-                lagged[i:j, :] = lagmat(X[i:j], maxlag=self.n_lags,
-                                        trim='forward', original='ex')
+        if self.n_features == 1:
+            lagged = None
+            if lengths is None:
+                lagged = lagmat(X, maxlag=self.n_lags, trim='forward',
+                                original='ex')
+            else:
+                lagged = np.zeros((len(X), self.n_lags))
+                for i, j in iter_from_X_lengths(X, lengths):
+                    lagged[i:j, :] = lagmat(X[i:j], maxlag=self.n_lags,
+                                            trim='forward', original='ex')
 
-        inputs = {'obs': X.reshape(-1,1),
-                  'lagged': lagged}
-        return inputs
+            return {'obs': X.reshape(-1,1),
+                    'lagged': lagged.reshape(-1, self.n_features, self.n_lags)}
+        else:  # TODO: implement
+            """
+            ...
+            """
+            raise ValueError('not implemented')
 
     def fit(self, X, lengths=None):
         """Estimate model parameters.
@@ -455,7 +469,7 @@ class ARTHMM(THMM):
                  List of hidden states (accounting for tied states by giving
                  them the same index)
         """
-        if random_state is None:
+        if random_state is None:  # TODO: generating samples for n_features > 1
             random_state = self.random_state
         random_state = check_random_state(random_state)
 
@@ -476,22 +490,7 @@ class ARTHMM(THMM):
 
         if self.n_lags > 0:
             if init_samples is None:
-                """
-                n_init_samples = order + 10
-                noise = np.sqrt(1.0/self._precision_[start_state]) * \
-                        random_state.randn(n_init_samples)
-
-                pad_after = n_init_samples - order - 1
-                col = np.pad(1*self._alpha_[start_state, :], (1, pad_after),
-                             mode='constant')
-                row = np.zeros(n_init_samples)
-                col[0] = row[0] = 1
-
-                A = toeplitz(col, row)
-                init_samples = np.dot(pinv(A), noise + self._mu_[start_state])
-                # TODO: fix bug with n_lags > 1, blows up
-                """
-                init_samples = 0.01*np.ones((self.n_lags, self.n_features))  # temporary fix
+                init_samples = 0.01*np.ones((self.n_lags, self.n_features))  # TODO: better init
 
         if observed_states is None:
             transmat_pdf = np.exp(np.copy(self._log_transmat))
