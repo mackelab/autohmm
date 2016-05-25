@@ -138,6 +138,7 @@ class THMM(_BaseAUTOHMM):
                                    n_iter=n_iter, n_iter_min=n_iter_min,
                                    n_iter_update=n_iter_update,
                                    random_state=random_state, verbose=verbose)
+
         self.n_tied = n_tied
         self.n_chain = n_tied+1
         self.n_unique = n_unique
@@ -187,11 +188,10 @@ class THMM(_BaseAUTOHMM):
 
         det = np.linalg.det(np.linalg.inv(p))
         det = det.reshape(1, self.n_unique)
-
         tem = np.einsum('NUF,UFX,NUX->NU', (xn - m), p, (xn - m))
-
         res = (-self.n_features/2.0)*np.log(2*np.pi) - 0.5*tem - 0.5*np.log(det)
-
+        #if det[i] < 0. for in range(len(det)):
+        #   raise ValueError('determinant is negative')
         return res  # N x n_unique
 
     def _obj(self, m, p, xn, gn, **kwargs):
@@ -201,8 +201,10 @@ class THMM(_BaseAUTOHMM):
         mp = self.mu_prior_
         pw = self.precision_weight_
         pp = self.precision_prior_
+
         m = m.reshape(self.n_unique, self.n_features, 1)
         mp = mp.reshape(self.n_unique, self.n_features, 1)
+
         prior = (pw-0.5) * np.log(p) - 0.5*p*(mw*(m-mp)**2 + 2*pp)
 
         res = -1*(np.sum(gn * ll) ) + np.sum(prior)
@@ -244,6 +246,9 @@ class THMM(_BaseAUTOHMM):
                 if p == 'm':
                     self.mu_ = newv
                 elif p == 'p':
+                    # ensure that precision matrix is symmetric
+                    for u in range(self.n_unique):
+                        newv[u,:,:] = (newv[u,:,:] + newv[u,:,:].T)/2.0
                     self.precision_ = newv
                 else:
                     raise ValueError('unknown parameter')
@@ -255,9 +260,9 @@ class THMM(_BaseAUTOHMM):
             self.startprob_.fill(1.0 / self.n_components)
 
         if 't' in params or 'm' in params or 'p' in params:
-            kmmod = cluster.KMeans(
-                n_clusters=self.n_unique,
-                random_state=self.random_state).fit(X)
+
+            kmmod = cluster.KMeans(n_clusters=self.n_unique,
+                                   random_state=self.random_state).fit(X)
             kmeans = kmmod.cluster_centers_
 
         if 't' in params:
@@ -278,6 +283,7 @@ class THMM(_BaseAUTOHMM):
                          [c * (self.n_chain)
                           for r in range(self.n_unique)
                           for c in range(self.n_unique) if c != r]] = 1.0
+
                 self.transmat_ = np.copy(transmat)
 
         if 'm' in params:
@@ -285,15 +291,17 @@ class THMM(_BaseAUTOHMM):
             for u in range(self.n_unique):
                 for f in range(self.n_features):
                     mu_init[u][f] = kmeans[u, f]
+
             self.mu_ = np.copy(mu_init)
 
         if 'p' in params:
             precision_init = np.zeros((self.n_unique, self.n_features, self.n_features))
             for u in range(self.n_unique):
                 if self.n_features == 1:
-                    precision_init[u] = 1.0 / np.cov(transpose_X[kmmod.labels_ == u])
+                    precision_init[u] = np.linalg.inv(np.cov(X[kmmod.labels_ == u], bias = 1))
                 else:
                     precision_init[u] = np.linalg.inv(np.cov(np.transpose(X[kmmod.labels_ == u])))
+
             self.precision_ = np.copy(precision_init)
 
     def _do_mstep(self, stats, params):  # M-Step for startprob and transmat
@@ -426,10 +434,8 @@ class THMM(_BaseAUTOHMM):
         for iter in range(self.n_iter):
             stats = self._initialize_sufficient_statistics()
             gn = np.zeros((X.shape[0], self.n_unique))
-
             curr_logprob = 0
             for i, j in iter_from_X_lengths(X, lengths):
-
                 flp = self._compute_log_likelihood(data, from_=i, to_=j) # n_samples, n_unique
                 flp_rep = np.zeros((flp.shape[0], self.n_components))
                 for u in range(self.n_unique):
@@ -519,8 +525,8 @@ class THMM(_BaseAUTOHMM):
             mean_ = mu[states[idx]]
 
             covar_ = np.linalg.inv(precision[states[idx]])
-            samples[idx] = multivariate_normal.rvs(mean=mean_, cov=covar_)
-                                                  # random_state=random_state)
+            samples[idx] = multivariate_normal.rvs(mean=mean_, cov=covar_,
+                                                   random_state=random_state)
         states = self._process_sequence(states)
         return samples, states
 
@@ -839,7 +845,7 @@ class THMM(_BaseAUTOHMM):
         return transmat
 
     def _get_transmat(self):  # TODO: decide upon shape
-        return np.exp(self._log_transmat)
+            return np.exp(self._log_transmat)
 
     def _set_transmat(self, transmat_val):
         if transmat_val is None:
@@ -859,7 +865,6 @@ class THMM(_BaseAUTOHMM):
 
         if not np.all(np.allclose(np.sum(transmat, axis=1), 1.0)):
             raise ValueError('Rows of transmat must sum to 1.0')
-
         self._log_transmat = np.log(np.asarray(transmat).copy())
         underflow_idx = np.isnan(self._log_transmat)
         self._log_transmat[underflow_idx] = NEGINF

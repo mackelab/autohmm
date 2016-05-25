@@ -4,7 +4,7 @@ import string
 import warnings
 
 from scipy import stats
-from scipy.stats import norm
+from scipy.stats import norm, multivariate_normal
 from scipy.linalg import toeplitz, pinv
 
 from sklearn import cluster
@@ -169,6 +169,7 @@ class ARTHMM(THMM):
                                      verbose=verbose,
                                      mu_bounds=mu_bounds,
                                      precision_bounds=precision_bounds)
+
         self.n_lags = n_lags
         if self.n_lags < 1:
             raise ValueError("n_lags needs to be greater than 0")
@@ -176,14 +177,18 @@ class ARTHMM(THMM):
         self.shared_alpha = shared_alpha
         self.alpha_ = alpha_init
         self.alpha_bounds = alpha_bounds
-
         self.wrt.extend(['a'])
+
+
         if not self.shared_alpha:
             self.wrt_dims.update({'a': (self.n_unique, self.n_lags)})
         else:
             self.wrt_dims.update({'a': (1, self.n_lags)})
+
+
         self.wrt_bounds.update({'a': (self.alpha_bounds[0],
                                       self.alpha_bounds[1])})
+
 
     def _compute_log_likelihood(self, data, from_=0, to_=-1):
         ll = self._ll(self.mu_, self.precision_, self.alpha_,
@@ -204,78 +209,130 @@ class ARTHMM(THMM):
         xln: N x n_features x n_lags
         """
 
-        n_samples = xn.shape[0]
-        xn = xn.reshape(n_samples, self.n_features, 1)
-        m = m.reshape(1, self.n_features, self.n_unique)
-
+        samples = xn.shape[0]
+        xn = xn.reshape(samples, 1, self.n_features)
+        m = m.reshape(1, self.n_unique, self.n_features)
         det = np.linalg.det(np.linalg.inv(p))
         det = det.reshape(1, self.n_unique)
 
-        xm = xn-(np.dot(xln, a.T) + m)
-        tem = np.einsum('NFU,UFX,NXU->NU', xm, p, xm)
+        lagged = np.dot(xln, a.T)  # NFU
+        lagged = np.swapaxes(lagged, 1, 2)  # NUF
+        xm = xn-(lagged + m)
+        tem = np.einsum('NUF,UFX,NUX->NU', xm, p, xm)
 
         res = (-self.n_features/2.0)*np.log(2*np.pi) - 0.5*tem - 0.5*np.log(det)
 
         return res
 
-    def _obj(self, m, p, a, xn, xln, gn, **kwargs):
+    def _obj(self, m, p, a, xn, xln, gn, entries='all', **kwargs):
+
         ll = self._ll(m, p, a, xn, xln)
 
         mw = self.mu_weight_
         mp = self.mu_prior_
         pw = self.precision_weight_
         pp = self.precision_prior_
-        prior = (pw-0.5) * np.log(p) - 0.5*p*(mw*(m-mp)**2 + 2*pp)
+        m = m.reshape(self.n_unique, self.n_features, 1)  #tm
+        mp = mp.reshape(self.n_unique, self.n_features, 1)  # tm
 
+        prior = (pw-0.5) * np.log(p) - 0.5*p*(mw*(m-mp)**2 + 2*pp)
         res = -1*(np.sum(gn * ll) + np.sum(prior))
+
         return res
 
-    def _obj_grad(self, wrt, m, p, a, xn, xln, gn, **kwargs):
-        res = grad(self._obj, wrt)(m, p, a, xn, xln, gn)
+    def _obj_grad(self, wrt, m, p, a, xn, xln, gn, entries='all', **kwargs):
+        m = m.reshape(self.n_unique, self.n_features, 1)  # tm
+
+        if wrt == 'm':
+            wrt_num = 0
+        elif wrt == 'p':
+            wrt_num = 1
+        elif wrt == 'a':
+            wrt_num = 2
+        else:
+            raise ValueError('unknown parameter')
+        res = grad(self._obj, wrt_num)(m, p, a, xn, xln, gn)
+
+        if wrt == 'p' and self.n_features > 1:
+            if entries == 'diag':
+                res_new = \
+                np.zeros((self.n_unique, self.n_features, self.n_features))
+                for u in range(self.n_unique):
+                    for f in range(self.n_features):
+                        res_new[u,f,f] = res[u,f,f]
+
+                res = np.copy(res_new)
+
+            elif entries == 'offdiag':
+                for u in range(self.n_unique):
+                    for f in range(self.n_features):
+                        res[u,f,f] = 0.
+
         res = np.array([res])
         return res
 
-    def _do_mstep_grad(self, puc, data):
+
+    def _do_mstep_grad(self, gn, data):
+
         wrt = [str(p) for p in self.wrt if str(p) in self.params]
+
         for update_idx in range(self.n_iter_update):
             for p in wrt:
-                if p == 'm':
+                if p in 'm':
                     optim_x0 = self.mu_
-                    wrt_arg = 0
+                    newv = self._do_optim(p, optim_x0, gn, data)
+                    self.mu_ = newv
+                elif p in 'a':
+                    optim_x0 = self.alpha_
+                    newv = self._do_optim(p, optim_x0, gn, data)
+                    self.alpha_ = newv
                 elif p == 'p':
                     optim_x0 = self.precision_
-                    wrt_arg = 1
-                elif p == 'a':
-                    optim_x0 = self.alpha_
-                    wrt_arg = 2
-                else:
-                    raise ValueError('unknown parameter')
 
-                optim_bounds = [self.wrt_bounds[p] for k in
-                                range(np.prod(self.wrt_dims[p]))]
-                result = minimize(fun=self._optim_wrap, jac=True,
-                                  x0=np.array(optim_x0).reshape(-1),
-                                  args=(p,
-                                        {'wrt': wrt_arg,
-                                         'p': self.precision_,
-                                         'm': self.mu_,
-                                         'a': self.alpha_,
-                                         'xn': data['obs'],
-                                         'xln': data['lagged'],
-                                         'gn': puc  # post. uni. concat.
-                                        }),
-                                  bounds=optim_bounds,
-                                  method='TNC')
+                    # update just diagonal
+                    newv = self._do_optim(p, optim_x0, gn, data, entries='diag')
 
-                newv = result.x.reshape(self.wrt_dims[p])
-                if p == 'm':
-                    self.mu_ = newv
-                elif p == 'p':
+                    template = np.copy(self.precision_)
+                    for u in range(self.n_unique):
+                        for f in range(self.n_features):
+                            template[u,f,f] = newv[u,f,f]
+
+                    self.precision_ = template
+
+                    optim_x0 = self.precision_
+
+                    # update just off diagonal
+                    newv = self._do_optim(p, optim_x0, gn, data, entries='offdiag')
+
+                    for u in range(self.n_unique):
+                        for f in range(self.n_features):
+                            newv[u,f,f] = self.precision_[u,f,f] + 0.
+                    # ensure that precision matrix is symmetric
+                    for u in range(self.n_unique):
+                        newv[u,:,:] = (newv[u,:,:] + newv[u,:,:].T)/2.0
+
                     self.precision_ = newv
-                elif p == 'a':
-                    self.alpha_ = newv
-                else:
-                    raise ValueError('unknown parameter')
+
+    def _do_optim(self, p, optim_x0, gn, data, entries='all'):
+        optim_bounds = [self.wrt_bounds[p] for k in
+                        range(np.prod(self.wrt_dims[p]))]
+
+        result = minimize(fun=self._optim_wrap,jac=True,
+                          x0=np.array(optim_x0).reshape(-1),
+                          args=(p,
+                                {'wrt': p,
+                                 'p': self.precision_,
+                                 'm': self.mu_,
+                                 'a': self.alpha_,
+                                 'xn': data['obs'],
+                                 'xln': data['lagged'],
+                                 'gn': gn,  # post. uni. concat.
+                                 'entries': entries
+                                }),
+                          bounds=optim_bounds,
+                          method='TNC')
+        new_value = result.x.reshape(self.wrt_dims[p])
+        return new_value
 
     def _init_params(self, data, lengths=None, params='stmpaw'):
         X = data['obs']
@@ -289,7 +346,7 @@ class ARTHMM(THMM):
             if 't' in params:
                 super(ARTHMM, self)._init_params(data, lengths, 't')
 
-            if 'm' in params or 'a' in params or 'p' in params:  # TODO: init for n_features > 1
+            if 'm' in params or 'a' in params or 'p' in params:
                 kmmod = cluster.KMeans(
                     n_clusters=self.n_unique,
                     random_state=self.random_state).fit(X)
@@ -297,51 +354,74 @@ class ARTHMM(THMM):
                 ar_mod = []
                 ar_alpha = []
                 ar_resid = []
+
                 if not self.shared_alpha:
+                    count = 0
                     for u in range(self.n_unique):
-                        ar_mod.append(smapi.tsa.AR(X[kmmod.labels_ == \
-                                                u]).fit(self.n_lags))
-                        ar_alpha.append(ar_mod[u].params[1:])
-                        ar_resid.append(ar_mod[u].resid)
+                        for f in range(self.n_features):
+                            ar_mod.append(smapi.tsa.AR(X[kmmod.labels_ == \
+                                            u,f]).fit(self.n_lags))
+                            ar_alpha.append(ar_mod[count].params[1:])
+                            ar_resid.append(ar_mod[count].resid)
+                            count += 1
                 else:
                     # run one AR model on most part of time series
                     # that has most points assigned after clustering
                     mf = np.argmax(np.bincount(kmmod.labels_))
-                    ar_mod.append(smapi.tsa.AR(X[kmmod.labels_ == \
-                                              mf]).fit(self.n_lags))
-                    ar_alpha.append(ar_mod[0].params[1:])
-                    ar_resid.append(ar_mod[0].resid)
+                    for f in range(self.n_features):
+                        ar_mod.append(smapi.tsa.AR(X[kmmod.labels_ == \
+                                                    mf,f]).fit(self.n_lags))
+                        ar_alpha.append(ar_mod[f].params[1:])
+                        ar_resid.append(ar_mod[f].resid)
 
-            if 'm' in params:  # TODO: init for n_features > 1
+            if 'm' in params:
                 mu_init = np.zeros((self.n_unique, self.n_features))
                 for u in range(self.n_unique):
-                    ar_idx = u
-                    if self.shared_alpha:
-                        ar_idx = 0
-                    mu_init[u] = kmeans[u, 0] - np.dot(
-                            np.repeat(kmeans[u, 0], self.n_lags),
-                            ar_alpha[ar_idx])
+                    for f in range(self.n_features):
+                        ar_idx = u
+                        if self.shared_alpha:
+                            ar_idx = 0
+                        mu_init[u,f] = kmeans[u, f] - np.dot(
+                        np.repeat(kmeans[u, f], self.n_lags), ar_alpha[ar_idx])
                 self.mu_ = np.copy(mu_init)
 
-            if 'p' in params:  # TODO: init for n_features > 1
-                precision_init = np.zeros((self.n_unique, self.n_features))
+            if 'p' in params:
+
+                precision_init = \
+                np.zeros((self.n_unique, self.n_features, self.n_features))
+                count = 0
                 for u in range(self.n_unique):
-                    if not self.shared_alpha:
-                        maxVar = np.max([np.var(ar_resid[i]) for i in
-                                        range(self.n_unique)])
+                    if self.n_features == 1:
+                        if self.shared_alpha:
+                            u = 0
+                        precision_init[u] = np.linalg.inv(\
+                        np.cov(X[kmmod.labels_ == u], bias = 1))
+
                     else:
-                        maxVar = np.var(ar_resid[0])
-                    precision_init[u] = 1.0 / maxVar
+                        precision_init[u] = np.linalg.inv\
+                        (np.cov(np.transpose(X[kmmod.labels_ == u])))
+
+                        # Alternative: Initialization using ar_resid
+                        #for f in range(self.n_features):
+                        #    if not self.shared_alpha:
+                        #        precision_init[u,f,f] = 1./np.var(ar_resid[count])
+                        #        count += 1
+                        #    else:
+                        #        precision_init[u,f,f] = 1./np.var(ar_resid[f])'''
+
                 self.precision_ = np.copy(precision_init)
 
-            if 'a' in params:  # TODO: init for n_features > 1
-                alpha_init = np.zeros((self.n_unique, self.n_lags))
-                for u in range(self.n_unique):
-                    ar_idx = u
-                    if self.shared_alpha:
+            if 'a' in params:
+                if self.shared_alpha:
+                    alpha_init = np.zeros((1, self.n_lags))
+                    alpha_init = ar_alpha[0].reshape((1, self.n_lags))
+                else:
+                    alpha_init = np.zeros((self.n_unique, self.n_lags))
+                    for u in range(self.n_unique):
                         ar_idx = 0
-                    alpha_init[u, :] = ar_alpha[ar_idx]
-                self.alpha_ = alpha_init
+                        alpha_init[u] = ar_alpha[ar_idx]
+                        ar_idx += self.n_features
+                self.alpha_ = np.copy(alpha_init)
 
     def _process_inputs(self, X, E=None, lengths=None):
         if self.n_features == 1:
@@ -357,11 +437,23 @@ class ARTHMM(THMM):
 
             return {'obs': X.reshape(-1,1),
                     'lagged': lagged.reshape(-1, self.n_features, self.n_lags)}
-        else:  # TODO: implement
-            """
-            ...
-            """
-            raise ValueError('not implemented')
+        else:
+            lagged = None
+            lagged = np.zeros((X.shape[0], self.n_features, self.n_lags))
+            if lengths is None:
+                tem = lagmat(X, maxlag=self.n_lags, trim='forward',
+                             original='ex')
+                for sample in range(X.shape[0]):
+                    lagged[sample] = np.reshape\
+                    (tem[sample], (self.n_features, self.n_lags), 'F')
+
+            else:
+                for i, j in iter_from_X_lengths(X, lengths):
+                    lagged[i:j, :] = lagmat(X[i:j], maxlag=self.n_lags,
+                                            trim='forward', original='ex')
+                    lagged.reshape(-1, self.n_featurs, self.n_lags)
+
+            return {'obs': X, 'lagged': lagged}
 
     def fit(self, X, lengths=None):
         """Estimate model parameters.
@@ -462,18 +554,19 @@ class ARTHMM(THMM):
 
         Returns
         -------
-        samples : array_like, length (``n_samples``)
+        samples : array_like, length (``n_samples``, ``n_features``)
                   List of samples
 
         states : array_like, shape (``n_samples``)
                  List of hidden states (accounting for tied states by giving
                  them the same index)
         """
-        if random_state is None:  # TODO: generating samples for n_features > 1
+        if random_state is None:
             random_state = self.random_state
         random_state = check_random_state(random_state)
 
-        samples = np.zeros(n_samples)
+
+        samples = np.zeros((n_samples, self.n_features))
         states = np.zeros(n_samples)
 
         order = self.n_lags
@@ -512,7 +605,9 @@ class ARTHMM(THMM):
         precision = np.copy(self._precision_)
         for idx in range(n_samples):
             state_ = int(states[idx])
-            var_ = np.sqrt(1/precision[state_])
+
+
+            covar_ = np.linalg.inv(precision[state_])
 
             if self.n_lags == 0:
                 mean_ = np.copy(self._mu_[state_])
@@ -524,12 +619,14 @@ class ARTHMM(THMM):
                         prev_ = init_samples[len(init_samples)-lag]
                     else:
                         prev_ = samples[idx-lag]
+
                     mean_ += np.copy(self._alpha_[state_, lag-1])*prev_
 
-            samples[idx] = norm.rvs(loc=mean_, scale=var_, size=1,
-                                    random_state=random_state)
+            samples[idx] = multivariate_normal.rvs(mean=mean_, cov=covar_,
+                                                   random_state=random_state)
 
         states = self._process_sequence(states)
+
         return samples, states
 
     def _get_alpha(self):
