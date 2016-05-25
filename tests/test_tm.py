@@ -46,8 +46,8 @@ class PlainGaussianHMM(TestCase):
         self.transmat = np.array([[0.7, 0.3],
                                   [0.4, 0.6]])
         self.mu = np.array([0.7, -2.0])
-        self.precision = np.array([[500],
-                                   [250]])
+        self.precision = np.array([[500.],
+                                   [250.]])
 
         self.h = tm.THMM(n_unique=self.n_unique,
                         random_state=self.prng,
