@@ -27,144 +27,183 @@ def test_precision_prior_unique():
     assert_array_equal(m._precision_prior_, correct_prior)
 
 def fit_hmm_and_monitor_log_likelihood(h, X, n_iter=1):
-    h.n_iter = 1        # make sure we do a single iteration at a time
-    h.init_params = ''  # and don't re-init params
+    #h.n_iter = 1        # make sure we do a single iteration at a time
+    #h.init_params = ''  # and don't re-init params
+    h.fit(X)
     loglikelihoods = np.empty(n_iter, dtype=float)
-    for i in range(n_iter):
-        h.fit(X)
-        loglikelihoods[i], _ = h.score_samples(X)
+    #for i in range(n_iter):
+    #    h.fit(X)
+    #    loglikelihoods[i], _ = h.score_samples(X)
     return loglikelihoods
 
 class PlainGaussianHMM(TestCase):
     def setUp(self):
-        self.prng = np.random.RandomState(42)
+        self.prng = np.random.RandomState(2)
 
         self.n_unique = 2
         self.n_components = 2
         self.startprob = np.array([0.6, 0.4])
-        self.transmat = np.array([[0.7, 0.3], [0.4, 0.6]])
+        self.transmat = np.array([[0.7, 0.3],
+                                  [0.4, 0.6]])
         self.mu = np.array([0.7, -2.0])
-        self.var = np.array([0.2, 0.2])
+        self.precision = np.array([[500.],
+                                   [250.]])
 
-        self.h = tm.THMM(n_unique=self.n_unique, random_state=self.prng)
-        self.h.startprob_ = self.startprob
-        self.h.transmat_ = self.transmat
-        self.h.mu_ = self.mu
-        self.h.var_ = self.var
-
-    def test_fit(self, params='stpmaw', n_iter=5, **kwargs):
-        h = self.h
-        h.params = params
-
-        lengths = 1000
-        X, _state_sequence = h.sample(lengths, random_state=self.prng)
-
-        # Perturb
-        pstarting = self.prng.rand(self.n_components)
-        normalize(pstarting)
-        h.startprob_ = pstarting
-        ptransmat = self.prng.rand(self.n_components, self.n_components)
-        normalize(ptransmat, axis=1)
-        h.transmat_ = ptransmat
-
-        # TODO: Test more parameters, generate test cases
-        trainll = fit_hmm_and_monitor_log_likelihood(
-            h, X, n_iter=n_iter)
-
-        # Check that the log-likelihood is always increasing during training.
-        #diff = np.diff(trainll)
-        #self.assertTrue(np.all(diff >= -1e-6),
-        #                "Decreasing log-likelihood: {0}" .format(diff))
-
-        assert_array_almost_equal(h.mu_.reshape(-1),
-                                  self.mu.reshape(-1), decimal=1)
-        assert_array_almost_equal(h.var_.reshape(-1),
-                                  self.var.reshape(-1), decimal=1)
-        assert_array_almost_equal(h.transmat_.reshape(-1),
-                                  self.transmat.reshape(-1), decimal=2)
-
-class MultivariateGaussianHMM(TestCase):
-    def setUp(self):
-        self.prng = np.random.RandomState(42)
-        self.n_unique = 2
-        self.n_features = 3
-        self.n_components = 6
-        self.startprob = np.array([0.6, 0.4])
-        self.transmat = np.array([[0.7, 0.3], [0.4, 0.6]])
-
-        self.mu = np.array([[0.7, -2.0, 0.1],
-                            [-0.7, 2.0, -0,1]])
-
-        self.precision = np.array([[[599, 394], [800, 834]],
-                                    [[375, 353], [342, 353]]])
-
-        self.h = tm.THMM(n_unique=self.n_unique, n_tied = 2, random_state=self.prng)
+        self.h = tm.THMM(n_unique=self.n_unique,
+                        random_state=self.prng,
+                         init_params = 'stmw',
+                         precision_bounds = np.array([-1e5, 1e5]))
         self.h.startprob_ = self.startprob
         self.h.transmat_ = self.transmat
         self.h.mu_ = self.mu
         self.h.precision_ = self.precision
 
-class TiedGaussianHMM(TestCase):
-    def setUp(self):
-        self.prng = np.random.RandomState(42)
-
-        self.n_unique = 2
-        self.n_components = 6
-        self.startprob = np.array([0.6, 0.4])
-        self.transmat = np.array([[0.7, 0.3], [0.4, 0.6]])
-
-        self.mu = np.array([0.7, -2.0])
-        self.var = np.array([0.2, 0.2])
-        self.h = tm.THMM(n_unique=self.n_unique, n_tied = 2, random_state=self.prng)
-        self.h.startprob_ = self.startprob
-        self.h.transmat_ = self.transmat
-        self.h.mu_ = self.mu
-        self.h.var_ = self.var
-
-    def test_fit(self, params='stpmaw', n_iter=50, **kwargs):
+    def test_fit(self, params='sptmw', **kwargs):
         h = self.h
-        self.transmat = np.copy(h.transmat_)
         h.params = params
-        lengths = 10000
+
+        lengths = 70000
         X, _state_sequence = h.sample(lengths, random_state=self.prng)
 
-        # Perturb
-        pstarting = self.prng.rand(self.n_components)
-        normalize(pstarting)
-        h.startprob_ = pstarting
-
-        template = np.zeros((6,6))
-        noise = np.random.normal(3, 2, 12)
-        nb = 0
-        for row in range(5):
-            template[row][row] = noise[nb]
-            nb = nb + 1
-            template[row][row+1] = noise[nb]
-            nb = nb + 1
-        template[5][0] = noise[nb]
-        nb = nb + 1
-        template[5][5] = noise[nb]
-        template = abs(template)
-
-        h.transmat_ = np.copy(template)
-
-
+        h.precision_ = np.array([[700],
+                                 [150]])
+        h.mu_ = np.array([2.6, 3.4])
+        h.transmat_ = np.array([[0.85, 0.15],
+                                [0.2, 0.8]])
         # TODO: Test more parameters, generate test cases
-        trainll = fit_hmm_and_monitor_log_likelihood(
-            h, X, n_iter=n_iter)
+        trainll = fit_hmm_and_monitor_log_likelihood(h, X)
 
         # Check that the log-likelihood is always increasing during training.
         #diff = np.diff(trainll)
         #self.assertTrue(np.all(diff >= -1e-6),
         #                "Decreasing log-likelihood: {0}" .format(diff))
 
-        assert_array_almost_equal(h.mu_.reshape(-1),
-                                  self.mu.reshape(-1), decimal=2)
-        assert_array_almost_equal(h.var_.reshape(-1),
-                                  self.var.reshape(-1), decimal=2)
-        assert_array_almost_equal(h.transmat_.reshape(-1),
-                                  self.transmat.reshape(-1), decimal=2)
 
+        assert_array_almost_equal(h.mu_.reshape(-1),
+                                  self.mu.reshape(-1), decimal=1)
+
+        assert_array_almost_equal(h.transmat_.reshape(-1),
+                                  self.transmat.reshape(-1), decimal=1)
+        assert_array_almost_equal(h.precision_.reshape(-1)/100,
+                                  self.precision.reshape(-1)/100, decimal =1)
+
+class MultivariateGaussianHMM(TestCase):
+    def setUp(self):
+        self.prng = np.random.RandomState(2)
+        self.n_tied = 2
+        self.n_features = 2
+        self.startprob = np.array([0.6, 0.4])
+        self.transmat = np.array([[0.7, 0.3], [0.4, 0.6]])
+
+        self.mu = np.array([[4.5, -1.5],
+                            [-0.7, -10.4]])
+
+        self.precision = np.array([[[0.5, 0.15],
+                                    [0.15, 0.4]],
+                                   [[0.6, 0.1],
+                                    [0.1, 0.35]]])
+
+        self.h = tm.THMM(n_unique=2, n_tied =self.n_tied,
+                         n_features=self.n_features,
+                         random_state=self.prng,
+                         precision_bounds=np.array([-1e5, 1e5]),
+                         init_params = 'stmaw', params='stmapw')
+        self.h.startprob_ = self.startprob
+        self.h.transmat_ = self.transmat
+        self.h.mu_ = self.mu
+        self.h.precision_ = self.precision
+
+    def test_fit(self, params='stmpaw', **kwargs):
+        h = self.h
+        h.params = params
+        lengths = 100000
+        X, _state_sequence = h.sample(lengths, random_state=self.prng)
+
+        # Perturb
+
+        h.precision_ = np.array([[[0.4, 0.12],
+                                  [0.12, 0.45]],
+                                 [[0.7, 0.2],
+                                  [0.2, 0.5]]])
+        h.transmat_ = np.array([[0.5, 0.5], [0.2, 0.8]])
+        h.mu_ = np.array([[5.8, -0.1],
+                          [-3.3, -9.6]])
+
+        self.transmat = np.array([[0.7, 0.3, 0, 0, 0, 0],
+                                 [0, 0.7, 0.3, 0, 0, 0],
+                                 [0, 0, 0.7, 0.3, 0, 0],
+                                 [0, 0, 0, 0.6, 0.4, 0],
+                                 [0, 0, 0, 0, 0.6, 0.4],
+                                 [0.4, 0, 0, 0, 0, 0.6]])
+
+        # TODO: Test more parameters, generate test cases
+        trainll = fit_hmm_and_monitor_log_likelihood(h, X)
+        # Check that the log-likelihood is always increasing during training.
+        #diff = np.diff(trainll)
+        #self.assertTrue(np.all(diff >= -1e-6),
+        #                "Decreasing log-likelihood: {0}" .format(diff))
+
+        assert_array_almost_equal(h.transmat_.reshape(-1),
+                                  self.transmat.reshape(-1), decimal=1)
+        assert_array_almost_equal(h.mu_.reshape(-1),
+                                  self.mu.reshape(-1), decimal=1)
+        assert_array_almost_equal(h.precision_.reshape(-1),
+                                  self.precision.reshape(-1), decimal=1)
+
+class TiedGaussianHMM(TestCase):
+    def setUp(self):
+        self.prng = np.random.RandomState(42)
+
+        self.n_tied = 2
+        self.n_unique = 2
+        self.startprob = np.array([0.6, 0.4])
+        self.transmat = np.array([[0.7, 0.3],
+                                  [0.4, 0.6]])
+        self.precision = np.array([[0.5],
+                                   [0.3]])
+        self.mu = np.array([[0.7],
+                            [-2.0]])
+        self.h = tm.THMM(n_unique=self.n_unique, n_tied =self.n_tied, random_state=self.prng,
+                         precision_bounds=np.array([-1e5, 1e5]), init_params = 'stmaw')
+        self.h.startprob_ = self.startprob
+        self.h.transmat_ = self.transmat
+        self.h.mu_ = self.mu
+        self.h.precision_ = self.precision
+
+    def test_fit(self, params='stmpaw', **kwargs):
+        h = self.h
+        h.params = params
+        lengths = 70000
+        X, _state_sequence = h.sample(lengths, random_state=self.prng)
+
+        h.mu_ = np.array([[3.5],
+                          [-3.9]])
+        h.transmat_ = np.array([[0.9, 0.1],
+                                [0.7, 0.3]])
+        h.precision_ = np.array([[0.4],
+                                 [0.2]])
+
+        self.transmat = np.array([[0.7, 0.3, 0, 0, 0, 0],
+                                  [0, 0.7, 0.3, 0, 0, 0],
+                                  [0, 0, 0.7, 0.3, 0, 0],
+                                  [0, 0, 0, 0.6, 0.4, 0],
+                                  [0, 0, 0, 0, 0.6, 0.4],
+                                  [0.4, 0, 0, 0, 0, 0.6]])
+
+        # TODO: Test more parameters, generate test cases
+
+        trainll = fit_hmm_and_monitor_log_likelihood(h, X)
+
+        # Check that the log-likelihood is always increasing during training.
+        #diff = np.diff(trainll)
+        #self.assertTrue(np.all(diff >= -1e-6),
+        #                "Decreasing log-likelihood: {0}" .format(diff))
+        assert_array_almost_equal(h.mu_.reshape(-1),
+                                  self.mu.reshape(-1), decimal=1)
+        assert_array_almost_equal(h.transmat_.reshape(-1),
+                                  self.transmat.reshape(-1), decimal=1)
+        assert_array_almost_equal(h.precision_.reshape(-1),
+                                  self.precision.reshape(-1), decimal=0)
 
 if __name__ == '__main__':
     unittest.main()
