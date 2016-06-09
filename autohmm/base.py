@@ -100,14 +100,22 @@ class _BaseAUTOHMM(_BaseHMM):
         return logprob, state_sequence
 
     def _decode_viterbi(self, data):  # adapted hmmlearn
-        framelogprob = self._compute_log_likelihood(data)
-        viterbi_logprob, state_sequence = self._do_viterbi_pass(framelogprob)
+        flp = self._compute_log_likelihood(data)
+        flp_rep = np.zeros((flp.shape[0], self.n_components))
+        for u in range(self.n_unique):
+            for c in range(self.n_chain):
+                flp_rep[:, u*self.n_chain+c] = flp[:, u]
+        viterbi_logprob, state_sequence = self._do_viterbi_pass(flp_rep)
         return viterbi_logprob, state_sequence
 
     def _decode_map(self, data):  # adapted hmmlearn
-        framelogprob = self._compute_log_likelihood(data)
-        logprob, fwdlattice = self._do_forward_pass(framelogprob)
-        bwdlattice = self._do_backward_pass(framelogprob)
+        flp = self._compute_log_likelihood(data)
+        flp_rep = np.zeros((flp.shape[0], self.n_components))
+        for u in range(self.n_unique):
+            for c in range(self.n_chain):
+                flp_rep[:, u*self.n_chain+c] = flp[:, u]
+        logprob, fwdlattice = self._do_forward_pass(flp_rep)
+        bwdlattice = self._do_backward_pass(flp_rep)
         gamma = fwdlattice + bwdlattice
         # gamma is guaranteed to be correctly normalized by logprob at
         # all frames, unless we do approximate inference using pruning.
@@ -176,6 +184,7 @@ class _BaseAUTOHMM(_BaseHMM):
 
         # Based on hmmlearn's _BaseHMM
         safe_transmat = self.transmat_ + np.finfo(float).eps
+
         stats['nobs'] += 1
         if 's' in self.params:
             stats['start'] += posteriors[0]
@@ -196,4 +205,32 @@ class _BaseAUTOHMM(_BaseHMM):
             # if np.sum(stats['trans']) != X.shape[0]-1:
             #     warnings.warn("transmat counts != n_samples", RuntimeWarning)
             #     import pdb; pdb.set_trace()
-            stats['trans'][np.where(stats['trans'] < 0.01)] = 0.0
+
+            template = np.zeros((self.n_components, self.n_components))
+            for u in range(self.n_components):
+                template[u,u] = stats['trans'][u,u] + 0.
+
+
+            for l in range(self.n_components - 1):
+                template[l, (l + 1)] = stats['trans'][l, (l + 1)] + 0.
+
+
+            for b in range(self.n_unique):
+                transition_index = \
+                [i * self.n_chain for i in range(self.n_unique)]
+                transition_index.remove(b * self.n_chain)
+
+                block = \
+                stats['trans'][self.n_chain * b : self.n_chain * (b + 1)][:] + 0.
+
+                template_block = \
+                template[self.n_chain * b : self.n_chain * (b + 1)][:] + 0.
+
+                for i in transition_index:
+                    template_block[(self.n_chain - 1), i] = \
+                    block[(self.n_chain - 1), i]
+
+                template[self.n_chain * b : self.n_chain * (b + 1)][:] = \
+                template_block
+
+            stats['trans'] = np.copy(template)
