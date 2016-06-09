@@ -260,7 +260,6 @@ class ARTHMM(THMM):
                 for u in range(self.n_unique):
                     for f in range(self.n_features):
                         res_new[u,f,f] = res[u,f,f]
-
                 res = np.copy(res_new)
 
             elif entries == 'offdiag':
@@ -303,7 +302,6 @@ class ARTHMM(THMM):
 
                     # update just off diagonal
                     newv = self._do_optim(p, optim_x0, gn, data, entries='offdiag')
-
                     for u in range(self.n_unique):
                         for f in range(self.n_features):
                             newv[u,f,f] = self.precision_[u,f,f] + 0.
@@ -422,7 +420,7 @@ class ARTHMM(THMM):
                         alpha_init[u] = ar_alpha[ar_idx]
                         ar_idx += self.n_features
                 self.alpha_ = np.copy(alpha_init)
-
+                                
     def _process_inputs(self, X, E=None, lengths=None):
         if self.n_features == 1:
             lagged = None

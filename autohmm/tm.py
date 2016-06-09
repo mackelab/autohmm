@@ -271,6 +271,7 @@ class THMM(_BaseAUTOHMM):
                 transmat = np.ones([self.n_components, self.n_components])
                 np.fill_diagonal(transmat, 10.0)
                 self.transmat_ = transmat  # .90 for self-transition
+
             else:
                 transmat = np.zeros((self.n_components, self.n_components))
                 transmat[range(self.n_components),
@@ -449,7 +450,6 @@ class THMM(_BaseAUTOHMM):
                 posteriors = self._compute_posteriors(fwdlattice, bwdlattice)
                 self._accumulate_sufficient_statistics(
                     stats, X[i:j], flp_rep, posteriors, fwdlattice, bwdlattice)
-
                 # sum responsibilities across chain if tied states exist
                 if self.n_tied == 0:
                     gn[i:j, :] = posteriors
@@ -743,8 +743,7 @@ class THMM(_BaseAUTOHMM):
         else:
             startprob = np.asarray(startprob, dtype=np.float)
 
-            if not np.alltrue(startprob <= 1.0):
-                normalize(startprob)
+            normalize(startprob)
 
             if len(startprob) != self.n_components:
                 if len(startprob) == self.n_unique:
