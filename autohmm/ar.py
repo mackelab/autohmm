@@ -387,13 +387,10 @@ class ARTHMM(THMM):
 
                 precision_init = \
                 np.zeros((self.n_unique, self.n_features, self.n_features))
-                count = 0
+
                 for u in range(self.n_unique):
                     if self.n_features == 1:
-                        if self.shared_alpha:
-                            u = 0
-                        precision_init[u] = np.linalg.inv(\
-                        np.cov(X[kmmod.labels_ == u], bias = 1))
+                        precision_init[u] = 1.0/(np.var(X[kmmod.labels_ == u]))
 
                     else:
                         precision_init[u] = np.linalg.inv\
@@ -420,7 +417,7 @@ class ARTHMM(THMM):
                         alpha_init[u] = ar_alpha[ar_idx]
                         ar_idx += self.n_features
                 self.alpha_ = np.copy(alpha_init)
-                                
+
     def _process_inputs(self, X, E=None, lengths=None):
         if self.n_features == 1:
             lagged = None
