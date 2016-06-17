@@ -190,8 +190,7 @@ class THMM(_BaseAUTOHMM):
         det = det.reshape(1, self.n_unique)
         tem = np.einsum('NUF,UFX,NUX->NU', (xn - m), p, (xn - m))
         res = (-self.n_features/2.0)*np.log(2*np.pi) - 0.5*tem - 0.5*np.log(det)
-        #if det[i] < 0. for in range(len(det)):
-        #   raise ValueError('determinant is negative')
+
         return res  # N x n_unique
 
     def _obj(self, m, p, xn, gn, **kwargs):
