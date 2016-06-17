@@ -96,7 +96,7 @@ class ARMultivariateStudentHMM(TestCase):
 
 class ARStudentTHMM(TestCase):
     def setUp(self):
-        self.prng = np.random.RandomState(16)
+        self.prng = np.random.RandomState(96)
 
         self.n_tied = 2
         self.n_unique = 2
