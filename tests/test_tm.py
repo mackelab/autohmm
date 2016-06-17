@@ -203,7 +203,7 @@ class TiedGaussianHMM(TestCase):
         assert_array_almost_equal(h.transmat_.reshape(-1),
                                   self.transmat.reshape(-1), decimal=1)
         assert_array_almost_equal(h.precision_.reshape(-1),
-                                  self.precision.reshape(-1), decimal=0)
+                                  self.precision.reshape(-1), decimal=1)
 
 if __name__ == '__main__':
     unittest.main()
