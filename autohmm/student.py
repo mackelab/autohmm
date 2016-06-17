@@ -18,7 +18,6 @@ import statsmodels.api as smapi
 from statsmodels.tsa.tsatools import lagmat
 
 
-from statsmodels.sandbox.distributions.multivariate import multivariate_t_rvs
 from .ar import ARTHMM
 
 __all__ = ['STUDENT']
@@ -232,6 +231,46 @@ class STUDENT(ARTHMM):
                 self.precision_ = self.precision_ * \
                 (self.degree_freedom/(self.degree_freedom - 2))
 
+        # Adapted from: https://github.com/statsmodels/
+        # statsmodels/blob/master/statsmodels/sandbox/distributions/multivariate.py
+        #written by Enzo Michelangeli, style changes by josef-pktd
+        # Student's T random variable
+        def multivariate_t_rvs(self, m, S, random_state = None):
+            '''generate random variables of multivariate t distribution
+            Parameters
+            ----------
+            m : array_like
+                mean of random variable, length determines dimension of random variable
+            S : array_like
+                square array of covariance  matrix
+            df : int or float
+                degrees of freedom
+            n : int
+                number of observations, return random array will be (n, len(m))
+            random_state : int
+                           seed
+            Returns
+            -------
+            rvs : ndarray, (n, len(m))
+                each row is an independent draw of a multivariate t distributed
+                random variable
+            '''
+            np.random.rand(9)
+            m = np.asarray(m)
+            d = self.n_features
+            df = self.degree_freedom
+            n = 1
+            if df == np.inf:
+                x = 1.
+            else:
+                x = random_state.chisquare(df, n)/df
+            np.random.rand(90)
+
+            z = random_state.multivariate_normal(np.zeros(d),S,(n,))
+            return m + z/np.sqrt(x)[:,None]
+            # same output format as random.multivariate_normal
+
+
         def sample(self, n_samples=2000, observed_states=None,
                    init_samples=None, init_state=None, random_state=None):
             """Generate random samples from the self.
@@ -308,7 +347,6 @@ class STUDENT(ARTHMM):
 
             else:
                 states = observed_states
-
             precision = np.copy(self._precision_)
             for idx in range(n_samples):
                 state_ = int(states[idx])
@@ -330,8 +368,8 @@ class STUDENT(ARTHMM):
                         mean_ += np.copy(self._alpha_[state_, lag-1])*prev_
 
 
-                samples[idx] = multivariate_t_rvs(mean_, covar_,
-                                                 self.degree_freedom)
+                samples[idx] = self.multivariate_t_rvs(mean_, covar_,
+                                                       random_state)
 
             states = self._process_sequence(states)
 
