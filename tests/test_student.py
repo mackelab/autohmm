@@ -30,7 +30,7 @@ def test_alpha_set_unique():
 
 class ARMultivariateStudentHMM(TestCase):
     def setUp(self):
-        self.prng = np.random.RandomState(14)  # TODO: remove fixed seeding
+        self.prng = np.random.RandomState(89)  # TODO: remove fixed seeding
         self.n_unique = 2
         self.n_features = 2
         self.n_lags = 2
@@ -96,7 +96,7 @@ class ARMultivariateStudentHMM(TestCase):
 
 class ARStudentTHMM(TestCase):
     def setUp(self):
-        self.prng = np.random.RandomState(96)
+        self.prng = np.random.RandomState(76)
 
         self.n_tied = 2
         self.n_unique = 2
@@ -115,7 +115,7 @@ class ARStudentTHMM(TestCase):
         self.h = student.STUDENT(n_unique=self.n_unique, n_lags = self.n_lags,
                                  n_tied =self.n_tied, random_state=self.prng,
                                  precision_bounds=np.array([-1e5, 1e5]),
-                                 init_params = 'smatp', shared_alpha = True,
+                                 init_params = '', shared_alpha = True,
                                  n_iter_min = 40)
 
         self.h.startprob_ = self.startprob
@@ -124,7 +124,7 @@ class ARStudentTHMM(TestCase):
         self.h.alpha_ = self.alpha
         self.h.precision_ = self.precision
 
-    def test_fit(self, params='mtaps', **kwargs):
+    def test_fit(self, params='saptm', **kwargs):
 
         h = self.h
         h.params = params
@@ -135,8 +135,8 @@ class ARStudentTHMM(TestCase):
 
         # Perturb Parameters, fit and check for recovery
 
-        h.mu_ = np.array([[1.],
-                          [-2.5]])
+        h.mu_ = np.array([[1.5],
+                          [-2.7]])
 
         h.transmat_ = np.array([[0.9, 0.1],
                                 [0.7, 0.3]])
