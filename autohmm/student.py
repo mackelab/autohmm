@@ -229,7 +229,7 @@ class STUDENT(ARTHMM):
 
             if 'p' in params:
                 self.precision_ = self.precision_ * \
-                (self.degree_freedom/(self.degree_freedom - 2))
+                ((self.degree_freedom - 2)/self.degree_freedom)
 
         # Adapted from: https://github.com/statsmodels/
         # statsmodels/blob/master/statsmodels/sandbox/distributions/multivariate.py
